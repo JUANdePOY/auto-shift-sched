@@ -1,69 +1,145 @@
-# React + TypeScript + Vite
+# Auto Shift Scheduler
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A full-stack application for automated employee shift scheduling with React TypeScript frontend and Node.js/Express backend with MySQL database.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Employee Management**: CRUD operations for employees with skills and availability tracking
+- **Shift Scheduling**: Create, view, update, and delete shifts with required skills and employee assignments
+- **Weekly View**: Calendar interface for viewing and managing weekly schedules
+- **Automated Scheduling**: (Planned) Algorithm for automatically assigning employees to shifts based on skills and availability
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Frontend
+- React 18 with TypeScript
+- React Router for navigation
+- Axios for API calls
+- CSS Modules for styling
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Backend
+- Node.js with Express
+- MySQL database with connection pooling
+- CORS enabled for frontend communication
+- RESTful API design
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+### Database
+- MySQL with XAMPP/WAMP
+- Tables: employees, shifts, timeoff (planned)
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Project Structure
+
+```
+auto-shift-sched/
+├── server/                 # Backend Express server
+│   └── index.js           # Main server file with all API routes
+├── frontend/              # React TypeScript frontend
+│   ├── src/
+│   │   ├── components/    # React components
+│   │   ├── services/      # API service functions
+│   │   └── App.tsx        # Main app component
+├── insert_sample_data.js  # Script to insert sample employee data
+├── insert_weekly_schedule.sql # SQL script for sample schedule data
+├── insert_schedule.sh     # Shell script to insert schedule data via API
+├── test_schedule_api.sh   # Test script for schedule API endpoints
+└── PROJECT_TODO.md        # Complete project task list
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Setup Instructions
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Prerequisites
+- Node.js (v14 or higher)
+- MySQL (XAMPP/WAMP recommended)
+- npm or yarn
 
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 1. Database Setup
+```bash
+# Start MySQL server (XAMPP/WAMP)
+# Create database (auto-shift-sched will be created automatically)
 ```
+
+### 2. Backend Setup
+```bash
+cd server
+npm install
+npm start
+```
+Server runs on http://localhost:3001
+
+### 3. Frontend Setup
+```bash
+cd frontend
+npm install
+npm start
+```
+Frontend runs on http://localhost:3000
+
+### 4. Insert Sample Data
+```bash
+# Insert sample employees
+node insert_sample_data.js
+
+# Insert sample schedule (make sure server is running)
+./insert_schedule.sh
+```
+
+## API Endpoints
+
+### Employees
+- `GET /api/employees` - Get all employees
+- `GET /api/employees/:id` - Get single employee
+- `POST /api/employees` - Create new employee
+- `PUT /api/employees/:id` - Update employee
+- `DELETE /api/employees/:id` - Delete employee
+
+### Shifts/Schedule
+- `GET /api/shifts` - Get all shifts
+- `GET /api/shifts/range?startDate=&endDate=` - Get shifts by date range
+- `POST /api/shifts` - Create new shift
+- `PUT /api/shifts/:id` - Update shift
+- `DELETE /api/shifts/:id` - Delete shift
+
+## Testing
+
+```bash
+# Test schedule API endpoints
+./test_schedule_api.sh
+
+# Test with curl
+curl http://localhost:3001/api/employees
+curl http://localhost:3001/api/shifts
+```
+
+## Current Status
+
+✅ **Completed:**
+- Backend server with employee and schedule APIs
+- Frontend React app with employee management
+- Database schema and sample data insertion
+- Basic schedule view component
+
+🚧 **In Progress:**
+- Timeoff request management
+- User authentication
+- Automated scheduling algorithm
+
+## Next Steps
+
+1. Complete timeoff management system
+2. Implement user authentication
+3. Develop automated scheduling algorithm
+4. Add advanced filtering and search
+5. Implement notifications system
+6. Add reporting and analytics
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details
