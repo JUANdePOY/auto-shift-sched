@@ -1,5 +1,5 @@
-const db = require('../config/database');
-const { formatEmployee, formatShift } = require('./formatUtils');
+const db = require('../../../shared/config/database');
+const { formatEmployee, formatShift } = require('../../../shared/utils/formatUtils');
 
 /**
  * Constraint-Based Shift Scheduler
@@ -134,9 +134,9 @@ class ShiftScheduler {
       }
 
       // Check if employee has required skills
-      if (this.rules.skillMatching && shift.requiredSkills.length > 0) {
-        const hasRequiredSkills = shift.requiredSkills.every(skill => 
-          employee.skills.includes(skill)
+      if (this.rules.skillMatching && shift.requiredStation.length > 0) {
+        const hasRequiredSkills = shift.requiredStation.every(station => 
+          employee.station.includes(station)
         );
         if (!hasRequiredSkills) {
           return false;
@@ -167,7 +167,7 @@ class ShiftScheduler {
       let score = 0;
 
       // Skill match bonus
-      const skillMatch = this.calculateSkillMatch(employee.skills, shift.requiredSkills);
+      const skillMatch = this.calculateSkillMatch(employee.station, shift.requiredStation);
       score += skillMatch * 40;
 
       // Availability preference bonus
@@ -212,14 +212,14 @@ class ShiftScheduler {
   /**
    * Calculate skill match percentage
    */
-  calculateSkillMatch(employeeSkills, requiredSkills) {
-    if (requiredSkills.length === 0) return 1;
-    
-    const matchedSkills = requiredSkills.filter(skill => 
-      employeeSkills.includes(skill)
+  calculateSkillMatch(employeeStation, requiredStation) {
+    if (requiredStation.length === 0) return 1;
+
+    const matchedStations = requiredStation.filter(station =>
+      employeeStation.includes(station)
     ).length;
-    
-    return matchedSkills / requiredSkills.length;
+
+    return matchedStations / requiredStation.length;
   }
 
   /**

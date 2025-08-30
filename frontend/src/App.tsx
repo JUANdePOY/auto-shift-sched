@@ -4,6 +4,7 @@ import { Dashboard } from './features/shared/components/Dashboard';
 import { AISuggestionsPanel } from './features/ai-suggestions/components/AISuggestionPanel';
 import { ScheduleView } from './features/schedule/components/ScheduleView';
 import { Employees } from './features/employees/components/Employees';
+import AvailabilityPanel from './features/availability/components/AvailabilityPanel';
 import { Toaster } from './features/shared/components/ui/sonner';
 import { toast } from 'sonner';
 import { useEmployees } from './features/employees/hooks/useEmployees';
@@ -12,7 +13,7 @@ import { useAssignments } from './features/shared/hooks/useAssignments';
 import { useSuggestions } from './features/ai-suggestions/hooks/useSuggestions';
 import type { AISuggestion } from './features/shared/types';
 
-type View = 'dashboard' | 'suggestions' | 'schedule' | 'employees' | 'settings';
+type View = 'dashboard' | 'suggestions' | 'schedule' | 'employees' | 'availability' | 'settings';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -20,7 +21,7 @@ export default function App() {
   // Custom hooks for state management
   const { employees, updateEmployeeHours } = useEmployees();
   const { schedule, updateShiftAssignment } = useSchedule();
-  const { handleAssignEmployee } = useAssignments();
+  const { handleAssignEmployee, handleUnassignEmployee } = useAssignments();
   const { handleApplySuggestion } = useSuggestions();
 
   const handleApplySuggestionWrapper = (suggestion: AISuggestion) => {
@@ -34,6 +35,16 @@ export default function App() {
 
   const handleAssignEmployeeWrapper = (shiftId: string, employeeId: string) => {
     handleAssignEmployee(
+      shiftId,
+      employeeId,
+      employees,
+      updateShiftAssignment,
+      updateEmployeeHours
+    );
+  };
+
+  const handleUnassignEmployeeWrapper = (shiftId: string, employeeId: string) => {
+    handleUnassignEmployee(
       shiftId,
       employeeId,
       employees,
@@ -91,12 +102,30 @@ export default function App() {
             onEditShift={handleEditShift}
             onCreateShift={handleCreateShift}
             onAssignEmployee={handleAssignEmployeeWrapper}
+            onUnassignEmployee={handleUnassignEmployeeWrapper}
             onRefreshData={handleRefreshData}
           />
         );
 
       case 'employees':
         return <Employees />;
+      
+      case 'availability':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold">Availability Management</h2>
+            
+            {/* Admin View */}
+            
+            {/* All Submissions View */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4">All Availability Submissions</h3>
+            <AvailabilityPanel 
+              initialWeekStart={getCurrentWeekStart()}
+            />
+            </div>
+          </div>
+        );
       
       case 'dashboard':
       default:
@@ -109,6 +138,23 @@ export default function App() {
           />
         );
     }
+  };
+
+
+  // Helper function to get current week's Monday
+  const getCurrentWeekStart = () => {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Adjust for Sunday
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + diff);
+    
+    // Format as YYYY-MM-DD
+    const year = monday.getFullYear();
+    const month = String(monday.getMonth() + 1).padStart(2, '0');
+    const day = String(monday.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
   };
 
   return (

@@ -1,6 +1,6 @@
 const express = require('express');
-const db = require('../config/database');
-const { formatShift } = require('../utils/formatUtils');
+const db = require('../../../shared/config/database');
+const { formatShift } = require('../../../shared/utils/formatUtils');
 
 const router = express.Router();
 

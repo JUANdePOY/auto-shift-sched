@@ -1,6 +1,6 @@
 const express = require('express');
-const db = require('../config/database');
-const { formatEmployee, safeJsonParse } = require('../utils/formatUtils');
+const db = require('../../../shared/config/database');
+const { formatEmployee, safeJsonParse } = require('../../../shared/utils/formatUtils');
 const { 
   employeeValidationRules, 
   handleValidationErrors,

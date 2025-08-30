@@ -1,8 +1,8 @@
 const express = require('express');
-const db = require('../config/database');
-const { formatShift } = require('../utils/formatUtils');
-const ShiftScheduler = require('../utils/scheduler');
-const SuggestionEngine = require('../utils/suggestionEngine');
+const db = require('../../../shared/config/database');
+const { formatShift } = require('../../../shared/utils/formatUtils');
+const ShiftScheduler = require('../services/scheduler');
+const SuggestionEngine = require('../../ai-suggestions/services/suggestionEngine');
 
 const router = express.Router();
 
@@ -120,7 +120,7 @@ function detectScheduleConflicts(shifts) {
   // Simple conflict detection logic
   // This is a placeholder - in a real implementation, you would:
   // 1. Check for overlapping shifts for the same employee
-  // 2. Check for skill mismatches
+  // 2. Check for station mismatches
   // 3. Check for overtime violations
   // 4. Check for availability conflicts
   

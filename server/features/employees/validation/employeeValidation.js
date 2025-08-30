@@ -3,7 +3,7 @@
  */
 
 const { body, param, validationResult } = require('express-validator');
-const { createAppError, logError } = require('../utils/errorHandler');
+const { createAppError, logError } = require('../../../shared/utils/errorHandler');
 
 /**
  * Validation rules for creating/updating employees

@@ -1,14 +1,15 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
-const errorHandler = require('./middleware/errorHandler');
+const errorHandler = require('./shared/middleware/errorHandler');
 
 // Import route handlers
-const employeeRoutes = require('./routes/employees');
-const shiftRoutes = require('./routes/shifts');
-const scheduleRoutes = require('./routes/schedule');
-const assignmentRoutes = require('./routes/assignments');
-const departmentRoutes = require('./routes/departments');
+const employeeRoutes = require('./features/employees/routes/employees');
+const shiftRoutes = require('./features/schedule/routes/shifts');
+const scheduleRoutes = require('./features/schedule/routes/schedule');
+const assignmentRoutes = require('./features/schedule/routes/assignments');
+const departmentRoutes = require('./features/employees/routes/departments');
+const availabilityRoutes = require('./features/availability/routes/availability');
 
 const app = express();
 const port = 3001;
@@ -46,7 +47,7 @@ app.get('/setup-database', (req, res) => {
       startTime VARCHAR(8) NOT NULL,
       endTime VARCHAR(8) NOT NULL,
       date VARCHAR(10) NOT NULL,
-      requiredSkills JSON,
+      requiredStation JSON,
       requiredEmployees INT DEFAULT 1,
       assignedEmployees JSON,
       isCompleted BOOLEAN DEFAULT FALSE,
@@ -172,6 +173,7 @@ app.use('/api/shifts', shiftRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/shifts', assignmentRoutes); // Assignment routes are mounted under /api/shifts
 app.use('/api/departments', departmentRoutes);
+app.use('/api/availability', availabilityRoutes);
 
 // Error handling middleware (should be last)
 app.use(errorHandler);

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../shared/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../shared/components/ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipTrigger } from '../../shared/components/ui/tooltip';
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -9,11 +9,12 @@ import {
   Users, 
   Settings, 
   ChevronRight,
-  Zap
+  Zap,
+  Clock
 } from 'lucide-react';
 
 
-type View = 'dashboard' | 'suggestions' | 'schedule' | 'employees' | 'settings';
+type View = 'dashboard' | 'suggestions' | 'schedule' | 'employees' | 'availability' | 'settings';
 
 interface NavigationProps {
   currentView: View;
@@ -54,6 +55,11 @@ export function Navigation({ currentView, onViewChange, suggestionsCount = 0 }: 
       icon: Users,
     },
     {
+      id: 'availability',
+      label: 'Availability',
+      icon: Clock,
+    },
+    {
       id: 'settings',
       label: 'Settings',
       icon: Settings,
@@ -65,13 +71,13 @@ export function Navigation({ currentView, onViewChange, suggestionsCount = 0 }: 
       <div 
         className={cn(
           "fixed left-0 top-0 h-full bg-sidebar border-r border-sidebar-border z-50 transition-all duration-300 ease-in-out",
-          isExpanded ? "w-64" : "w-16"
+          isExpanded ? "w-64" : "w-18"
         )}
         onMouseEnter={() => setIsExpanded(true)}
         onMouseLeave={() => setIsExpanded(false)}
       >
         {/* Header */}
-        <div className="p-4 border-b border-sidebar-border">
+        <div className="p-3.5 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <Zap className="w-4 h-4 text-primary-foreground" />
@@ -102,7 +108,7 @@ export function Navigation({ currentView, onViewChange, suggestionsCount = 0 }: 
                         isActive 
                           ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm" 
                           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                        !isExpanded && "justify-center px-0"
+                        !isExpanded && "flex justify-center "
                       )}
                       onClick={() => onViewChange(item.id)}
                     >
@@ -128,16 +134,7 @@ export function Navigation({ currentView, onViewChange, suggestionsCount = 0 }: 
                     </Button>
                   </TooltipTrigger>
                   
-                  {!isExpanded && (
-                    <TooltipContent side="right" className="flex items-center gap-2">
-                      {item.label}
-                      {item.badge !== undefined && item.badge > 0 && (
-                        <span className="bg-destructive text-destructive-foreground px-1.5 py-0.5 rounded-full text-xs">
-                          {item.badge}
-                        </span>
-                      )}
-                    </TooltipContent>
-                  )}
+                  
                 </Tooltip>
             );
           })}

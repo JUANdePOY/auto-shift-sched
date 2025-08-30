@@ -71,7 +71,7 @@ export interface Shift {
   startTime: string;
   endTime: string;
   date: string;
-  requiredSkills: string[];
+  requiredStation: string[];
   requiredEmployees: number;
   assignedEmployees: string[];
   isCompleted: boolean;

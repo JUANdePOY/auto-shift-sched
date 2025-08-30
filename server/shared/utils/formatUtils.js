@@ -64,7 +64,7 @@ function formatShift(shift) {
     startTime: shift.startTime,
     endTime: shift.endTime,
     date: shift.date,
-    requiredSkills: safeJsonParse(shift.requiredSkills, []),
+    requiredStation: safeJsonParse(shift.requiredStation, []),
     requiredEmployees: shift.requiredEmployees,
     assignedEmployees: safeJsonParse(shift.assignedEmployees, []),
     isCompleted: Boolean(shift.isCompleted),

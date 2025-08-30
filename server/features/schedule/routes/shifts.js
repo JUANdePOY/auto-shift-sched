@@ -1,6 +1,6 @@
 const express = require('express');
-const db = require('../config/database');
-const { formatShift, safeJsonParse } = require('../utils/formatUtils');
+const db = require('../../../shared/config/database');
+const { formatShift, safeJsonParse } = require('../../../shared/utils/formatUtils');
 
 const router = express.Router();
 
@@ -37,10 +37,10 @@ router.get('/range', async (req, res, next) => {
 
 // POST create new shift
 router.post('/', async (req, res, next) => {
-  const { title, startTime, endTime, date, requiredSkills, requiredEmployees, assignedEmployees, isCompleted, priority, department } = req.body;
+  const { title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department } = req.body;
   
   const query = `
-    INSERT INTO shifts (title, startTime, endTime, date, requiredSkills, requiredEmployees, assignedEmployees, isCompleted, priority, department)
+    INSERT INTO shifts (title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   
@@ -49,7 +49,7 @@ router.post('/', async (req, res, next) => {
     startTime,
     endTime,
     date,
-    JSON.stringify(requiredSkills || []),
+    JSON.stringify(requiredStation || []),
     requiredEmployees || 1,
     JSON.stringify(assignedEmployees || []),
     Boolean(isCompleted),
@@ -73,11 +73,11 @@ router.post('/', async (req, res, next) => {
 // PUT update shift
 router.put('/:id', async (req, res, next) => {
   const { id } = req.params;
-  const { title, startTime, endTime, date, requiredSkills, requiredEmployees, assignedEmployees, isCompleted, priority, department } = req.body;
+  const { title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department } = req.body;
   
   const query = `
     UPDATE shifts 
-    SET title = ?, startTime = ?, endTime = ?, date = ?, requiredSkills = ?, requiredEmployees = ?, assignedEmployees = ?, isCompleted = ?, priority = ?, department = ?
+    SET title = ?, startTime = ?, endTime = ?, date = ?, requiredStation = ?, requiredEmployees = ?, assignedEmployees = ?, isCompleted = ?, priority = ?, department = ?
     WHERE id = ?
   `;
   
@@ -86,7 +86,7 @@ router.put('/:id', async (req, res, next) => {
     startTime,
     endTime,
     date,
-    JSON.stringify(requiredSkills || []),
+    JSON.stringify(requiredStation || []),
     requiredEmployees,
     JSON.stringify(assignedEmployees || []),
     Boolean(isCompleted),

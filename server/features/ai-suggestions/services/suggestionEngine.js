@@ -1,5 +1,5 @@
-const db = require('../config/database');
-const { formatEmployee, formatShift } = require('./formatUtils');
+const db = require('../../../shared/config/database');
+const { formatEmployee, formatShift } = require('../../../shared/utils/formatUtils');
 
 /**
  * AI Suggestion Engine for Manual Scheduling

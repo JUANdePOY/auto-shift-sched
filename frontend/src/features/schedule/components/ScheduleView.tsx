@@ -29,6 +29,7 @@ interface ScheduleViewProps {
   onEditShift: (shift: Shift) => void;
   onCreateShift: () => void;
   onAssignEmployee: (shiftId: string, employeeId: string) => void;
+  onUnassignEmployee: (shiftId: string, employeeId: string) => void;
   onRefreshData: () => void;
 }
 
@@ -39,6 +40,7 @@ export function ScheduleView({
   onEditShift,
   onCreateShift,
   onAssignEmployee,
+  onUnassignEmployee,
   onRefreshData
 }: ScheduleViewProps) {
   const [currentWeek, setCurrentWeek] = useState(new Date('2025-01-20'));
@@ -256,6 +258,7 @@ export function ScheduleView({
               employees={employees}
               conflicts={getShiftConflicts(selectedShift.id)}
               onAssignEmployee={onAssignEmployee}
+              onUnassignEmployee={onUnassignEmployee}
               onEditShift={() => {
                 onEditShift(selectedShift);
                 setSelectedShift(null);
@@ -452,6 +455,7 @@ interface ShiftDetailProps {
   employees: Employee[];
   conflicts: ScheduleConflict[];
   onAssignEmployee: (shiftId: string, employeeId: string) => void;
+  onUnassignEmployee: (shiftId: string, employeeId: string) => void;
   onEditShift: () => void;
   getEmployeeName: (employeeId: string) => string;
 }
@@ -461,11 +465,12 @@ function ShiftDetail({
   employees, 
   conflicts, 
   onAssignEmployee, 
+  onUnassignEmployee,
   onEditShift,
 }: ShiftDetailProps) {
   const availableEmployees = employees.filter(emp => 
     !shift.assignedEmployees.includes(emp.id) &&
-    shift.requiredSkills.some(skill => emp.skills?.includes(skill))
+    shift.requiredStation.some(station => emp.station?.includes(station))
   );
 
   return (
@@ -490,9 +495,9 @@ function ShiftDetail({
         <div>
           <p className="text-sm text-muted-foreground">Required Skills</p>
           <div className="flex gap-1 flex-wrap">
-            {shift.requiredSkills.map(skill => (
-              <Badge key={skill} variant="outline" className="text-xs">
-                {skill.replace('_', ' ')}
+            {shift.requiredStation.map(station => (
+              <Badge key={station} variant="outline" className="text-xs">
+                {station.replace('_', ' ')}
               </Badge>
             ))}
           </div>
@@ -531,7 +536,11 @@ function ShiftDetail({
                   <p className="text-sm">{employee?.name}</p>
                   <p className="text-xs text-muted-foreground">{employee?.role}</p>
                 </div>
-                <Button variant="ghost" size="sm">
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => onUnassignEmployee(shift.id, empId)}
+                >
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
@@ -549,7 +558,7 @@ function ShiftDetail({
               <div key={employee.id} className="flex items-center justify-between p-2 bg-muted/30 rounded">
                 <div>
                   <p className="text-sm">{employee.name}</p>
-                  <p className="text-xs text-muted-foreground">{employee.role}</p>
+                  <p className="text-xs text-muted-foreground">{employee.department}</p>
                 </div>
                 <Button 
                   size="sm" 

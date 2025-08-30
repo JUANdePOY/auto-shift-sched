@@ -1,39 +1,21 @@
-# Refactoring TODO List
+# Fix Availability API 400 Errors
 
-## Frontend Refactoring
+## Tasks
+- [x] Analyze the 400 error issue with /api/availability/week/:weekStart endpoint
+- [x] Identify missing endpoint in server routes
+- [x] Add GET /week/:weekStart endpoint to availability routes
+- [ ] Test the new endpoint functionality
 
-### Phase 1: Employees Component Breakdown ✅ COMPLETED
-- [x] Create EmployeeList component
-- [x] Create EmployeeFilters component  
-- [x] Create EmployeeStats component
-- [x] Create EmployeeCard component
-- [x] Refactor Employees.tsx to use new components
+## Root Cause
+The frontend AdminAvailabilityGrid component calls availabilityService.getWeeklySubmissions() which makes a GET request to /api/availability/week/:weekStart, but this endpoint was not defined in the server routes, causing 400 Bad Request errors.
 
-### Phase 2: Error Handling Improvements ✅ COMPLETED
-- [x] Enhance useEmployees hook error handling
-- [x] Add loading states to UI components
-- [x] Create error handling utility
+## Solution
+Added the missing endpoint to server/features/availability/routes/availability.js with proper validation and database querying.
 
-### Phase 3: Type Safety Enhancements ✅ COMPLETED
-- [x] Improve Employee type definitions
-- [x] Add form validation types
-
-## Backend Refactoring
-
-### Phase 4: Backend Improvements ✅ COMPLETED
-- [x] Add input validation to employees route
-- [x] Improve error handling consistency
-- [x] Enhance database error handling
-
-## Code Organization
-
-### Phase 5: Structure Improvements
-- [ ] Create feature-based directory structure
-- [ ] Add proper documentation
-
-## Testing
-
-### Phase 6: Testing Updates
-- [ ] Update frontend tests
-- [ ] Update backend tests
-- [ ] Add end-to-end tests (if time permits)
+## Changes Made
+- Added GET /week/:weekStart endpoint that:
+  - Validates weekStart parameter using validateWeekStartStatus middleware
+  - Queries availability_submissions table joined with employees table
+  - Returns all submissions for the given week with employee details
+  - Uses safeJsonParse for availability data
+  - Includes proper error handling
