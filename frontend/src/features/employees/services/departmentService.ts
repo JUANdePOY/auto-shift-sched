@@ -1,6 +1,6 @@
 import type { Department, Station } from '../../shared/types';
 
-const API_URL = 'http://localhost:3001/api/departments';
+const API_URL = `http://${window.location.hostname}:3001/api/departments`;
 
 /**
  * Fetches all departments from the API.

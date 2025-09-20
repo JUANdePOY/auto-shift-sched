@@ -25,7 +25,7 @@ class ShiftScheduler {
     try {
       // Fetch all employees and shifts for the date range
       const [employees, shifts] = await Promise.all([
-        this.getEmployees(),
+        this.getEmployees(startDate),
         this.getShiftsInRange(startDate, endDate)
       ]);
 
@@ -83,13 +83,44 @@ class ShiftScheduler {
   }
 
   /**
-   * Get all employees from database
+   * Get all employees from database with their submitted availability for the week
    */
-  async getEmployees() {
+  async getEmployees(startDate) {
     const [results] = await db.promise().query('SELECT * FROM employees');
-    const formattedEmployees = results.map(employee => formatEmployee(employee));
-    
-    return formattedEmployees;
+    const employees = results.map(employee => formatEmployee(employee));
+
+    // Calculate week start for availability lookup (Monday of the week containing startDate)
+    const weekStartStr = this.getWeekStart(startDate);
+
+    // Fetch submitted availability for each employee for this week
+    for (const employee of employees) {
+      try {
+        const availabilityService = require('../../availability/services/availabilityService');
+        const submittedAvailability = await availabilityService.getAvailability(employee.id, weekStartStr);
+
+        // Override default availability with submitted availability if available
+        if (submittedAvailability && submittedAvailability.availability) {
+          employee.availability = submittedAvailability.availability;
+        }
+      } catch (error) {
+        console.warn(`Could not fetch availability for employee ${employee.id}, using default:`, error.message);
+        // Keep default availability from employee record
+      }
+    }
+
+    return employees;
+  }
+
+  /**
+   * Get week start date (Monday) for a given date
+   */
+  getWeekStart(dateString) {
+    const date = new Date(dateString);
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to Monday
+    const weekStart = new Date(date);
+    weekStart.setDate(diff);
+    return weekStart.toISOString().split('T')[0];
   }
 
   /**

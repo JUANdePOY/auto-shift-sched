@@ -12,16 +12,28 @@ interface AvailabilityPanelProps {
   initialWeekStart?: string;
 }
 
-const getCurrentWeekStart = () => {
+const getCurrentDate = () => {
   const today = new Date();
-  const dayOfWeek = today.getDay();
-  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + diff);
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getMondayOfWeek = (dateString: string) => {
+  const date = new Date(dateString);
+  const dayOfWeek = date.getDay();
+  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Adjust to Monday
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + diff);
   const year = monday.getFullYear();
   const month = String(monday.getMonth() + 1).padStart(2, '0');
   const day = String(monday.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+const getCurrentWeekStart = () => {
+  return getMondayOfWeek(getCurrentDate());
 };
 
 const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -56,7 +68,9 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
   };
 
   const handleWeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setWeekStart(e.target.value);
+    const selectedDate = e.target.value;
+    const mondayOfWeek = getMondayOfWeek(selectedDate);
+    setWeekStart(mondayOfWeek);
   };
 
   const loadStatus = async () => {

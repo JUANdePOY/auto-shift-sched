@@ -41,8 +41,22 @@ class AvailabilityService {
           throw new Error('Employee not found');
         }
 
-        const availability = JSON.parse(employeeResult[0].availability || '{}');
-        
+        let availability;
+        try {
+          // Handle both JSON string and object formats
+          const availabilityData = employeeResult[0].availability;
+          if (typeof availabilityData === 'string') {
+            availability = JSON.parse(availabilityData || '{}');
+          } else if (typeof availabilityData === 'object' && availabilityData !== null) {
+            availability = availabilityData;
+          } else {
+            availability = {};
+          }
+        } catch (parseError) {
+          console.error(`Could not parse availability for employee ${employeeId}, using default:`, parseError.message);
+          availability = {};
+        }
+
         return {
           employeeId: parseInt(employeeId),
           weekStart,
@@ -249,16 +263,18 @@ class AvailabilityService {
    */
   async checkEmployeeAvailability(employeeId, date, startTime, endTime) {
     try {
-      // Get the week start date (Monday of the week)
+      // Use the provided date directly to find the week containing that date
       const targetDate = new Date(date);
       const dayOfWeek = targetDate.getDay();
+
+      // Calculate the Monday of the week containing the target date
       const weekStart = new Date(targetDate);
       weekStart.setDate(targetDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
       const weekStartStr = weekStart.toISOString().split('T')[0];
 
       // Get availability for the week
       const availability = await this.getAvailability(employeeId, weekStartStr);
-      
+
       const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
       const dayName = days[dayOfWeek];
       const dayAvailability = availability.availability[dayName];

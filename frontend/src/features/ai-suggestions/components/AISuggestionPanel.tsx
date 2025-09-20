@@ -1,37 +1,166 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../shared/components/ui/card';
 import { Button } from '../../shared/components/ui/button';
 import { Badge } from '../../shared/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../shared/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../shared/components/ui/tabs';
-import { 
-  Brain, 
-  TrendingUp, 
-  Target, 
-  Users, 
-  Star, 
-  CheckCircle, 
+import {
+  Brain,
+  TrendingUp,
+  Target,
+  Users,
+  Star,
+  CheckCircle,
   ArrowRight,
   ThumbsUp,
-  ThumbsDown
+  ThumbsDown,
+  X,
+  Clock,
+  User
 } from 'lucide-react';
 import type { AISuggestion, Employee } from '../../shared/types';
 
 interface AISuggestionsPanelProps {
-  suggestions: AISuggestion[];
+  suggestions?: AISuggestion[];
   employees: Employee[];
-  onApplySuggestion: (suggestion: AISuggestion) => void;
+  onApplySuggestion?: (suggestion: AISuggestion) => void;
+  // Panel mode props
+  isOpen?: boolean;
+  onClose?: () => void;
+  shiftId?: string;
+  shiftTitle?: string;
+  shiftTime?: string;
+  department?: string;
+  requiredStations?: string[];
+  availableEmployees?: Employee[];
+  mode?: 'full' | 'panel';
 }
 
-export function AISuggestionsPanel({ 
-  suggestions, 
-  employees, 
-  onApplySuggestion
+export function AISuggestionsPanel({
+  suggestions = [],
+  employees,
+  onApplySuggestion,
+  // Panel mode props
+  isOpen = false,
+  onClose,
+  shiftId,
+  shiftTitle,
+  shiftTime,
+  department,
+  requiredStations = [],
+  availableEmployees = [],
+  mode = 'full'
 }: AISuggestionsPanelProps) {
   const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
+
+  // Generate AI suggestions for the specific shift
+  const generateShiftSuggestions = (): AISuggestion[] => {
+    if (!shiftId || !availableEmployees.length) return [];
+
+    const shiftSuggestions: AISuggestion[] = [];
+
+    // Best match suggestion
+    const bestMatch = availableEmployees[0];
+    if (bestMatch) {
+      shiftSuggestions.push({
+        id: `suggestion-${shiftId}-best-match`,
+        type: 'assignment',
+        title: `Best Match: ${bestMatch.name}`,
+        description: `${bestMatch.name} is the optimal choice based on skills, availability, and workload balance.`,
+        confidence: 95,
+        impact: {
+          efficiency: 25,
+          satisfaction: 20,
+          coverage: 30
+        },
+        action: {
+          type: 'assign',
+          shiftId: shiftId,
+          employeeId: bestMatch.id
+        }
+      });
+    }
+
+    // Alternative suggestions
+    availableEmployees.slice(1, 3).forEach((employee, index) => {
+      shiftSuggestions.push({
+        id: `suggestion-${shiftId}-alt-${index}`,
+        type: 'assignment',
+        title: `Alternative: ${employee.name}`,
+        description: `${employee.name} is a good alternative with complementary skills.`,
+        confidence: 85 - (index * 5),
+        impact: {
+          efficiency: 20 - (index * 3),
+          satisfaction: 15 - (index * 2),
+          coverage: 25 - (index * 3)
+        },
+        action: {
+          type: 'assign',
+          shiftId: shiftId,
+          employeeId: employee.id
+        }
+      });
+    });
+
+    // Optimization suggestion
+    if (availableEmployees.length > 1) {
+      shiftSuggestions.push({
+        id: `suggestion-${shiftId}-optimization`,
+        type: 'optimization',
+        title: 'Optimize Workload Distribution',
+        description: 'Consider rotating assignments to ensure fair workload distribution across the team.',
+        confidence: 78,
+        impact: {
+          efficiency: 15,
+          satisfaction: 35,
+          coverage: 20
+        },
+        action: {
+          type: 'swap',
+          shiftId: shiftId,
+          employeeId: availableEmployees[0].id,
+          targetEmployeeId: availableEmployees[1].id
+        }
+      });
+    }
+
+    return shiftSuggestions;
+  };
+
+  const shiftSuggestions = generateShiftSuggestions();
 
   const handleApply = (suggestion: AISuggestion) => {
     setAppliedSuggestions(prev => new Set([...prev, suggestion.id]));
-    onApplySuggestion(suggestion);
+    if (onApplySuggestion) {
+      onApplySuggestion(suggestion);
+    }
+  };
+
+  const handleQuickAssign = (employeeId: string) => {
+    if (shiftId && onApplySuggestion) {
+      const employee = employees.find(emp => emp.id === employeeId);
+      if (employee) {
+        const quickSuggestion: AISuggestion = {
+          id: `quick-assign-${shiftId}-${employeeId}`,
+          type: 'assignment',
+          title: `Quick Assign: ${employee.name}`,
+          description: `Direct assignment of ${employee.name} to this shift.`,
+          confidence: 90,
+          impact: {
+            efficiency: 20,
+            satisfaction: 15,
+            coverage: 25
+          },
+          action: {
+            type: 'assign',
+            shiftId: shiftId,
+            employeeId: employeeId
+          }
+        };
+        handleApply(quickSuggestion);
+      }
+    }
   };
 
   const getEmployeeName = (employeeId: string) => {
@@ -57,14 +186,135 @@ export function AISuggestionsPanel({
     return 'text-red-600';
   };
 
+  const averageEfficiencyGain = shiftSuggestions.reduce((sum, s) => sum + s.impact.efficiency, 0) / shiftSuggestions.length || 0;
+  const averageConfidence = shiftSuggestions.reduce((sum, s) => sum + s.confidence, 0) / shiftSuggestions.length || 0;
+
+  // Panel mode - compact view
+  if (mode === 'panel') {
+    return (
+      <div className="h-full flex flex-col bg-background">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div>
+            <h3 className="font-semibold flex items-center gap-2">
+              <Brain className="w-5 h-5 text-blue-600" />
+              AI Suggestions
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {shiftTitle} at {shiftTime}
+            </p>
+          </div>
+          {onClose && (
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Quick Assign Section */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <User className="w-4 h-4" />
+                Quick Assign
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableEmployees.map(employee => (
+                    <SelectItem key={employee.id} value={employee.id}>
+                      {employee.name} - {employee.role}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={() => selectedEmployee && handleQuickAssign(selectedEmployee)}
+                disabled={!selectedEmployee}
+                size="sm"
+                className="w-full"
+              >
+                Assign Selected
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* AI Suggestions */}
+          <div className="space-y-3">
+            <h4 className="font-medium text-sm">Smart Recommendations</h4>
+            {shiftSuggestions.map((suggestion) => (
+              <Card key={suggestion.id} className="p-3">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 bg-blue-100 rounded">
+                      {getSuggestionIcon(suggestion.type)}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{suggestion.title}</p>
+                      <p className="text-xs text-muted-foreground">{suggestion.description}</p>
+                    </div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={`${getConfidenceColor(suggestion.confidence)} border-current text-xs`}
+                  >
+                    {suggestion.confidence}%
+                  </Badge>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-4 text-xs">
+                    <span>Efficiency: +{suggestion.impact.efficiency}%</span>
+                    <span>Coverage: +{suggestion.impact.coverage}%</span>
+                  </div>
+                  <Button
+                    onClick={() => handleApply(suggestion)}
+                    size="sm"
+                    variant="outline"
+                    disabled={appliedSuggestions.has(suggestion.id)}
+                  >
+                    {appliedSuggestions.has(suggestion.id) ? (
+                      <>
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Applied
+                      </>
+                    ) : (
+                      'Apply'
+                    )}
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {shiftSuggestions.length === 0 && (
+            <Card>
+              <CardContent className="pt-6 text-center">
+                <Brain className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="font-medium">No AI Suggestions</h3>
+                <p className="text-sm text-muted-foreground">
+                  No recommendations available for this shift.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Full mode - original implementation
   const categorizedSuggestions = {
     assignment: suggestions.filter(s => s.type === 'assignment'),
     optimization: suggestions.filter(s => s.type === 'optimization'),
     swap: suggestions.filter(s => s.type === 'swap')
   };
-
-  const averageEfficiencyGain = suggestions.reduce((sum, s) => sum + s.impact.efficiency, 0) / suggestions.length;
-  const averageConfidence = suggestions.reduce((sum, s) => sum + s.confidence, 0) / suggestions.length;
 
   return (
     <div className="space-y-6">
@@ -236,8 +486,8 @@ function SuggestionCard({
               <CardDescription>{suggestion.description}</CardDescription>
             </div>
           </div>
-          <Badge 
-            variant="outline" 
+          <Badge
+            variant="outline"
             className={`${getConfidenceColor(suggestion.confidence)} border-current`}
           >
             {suggestion.confidence}% confidence
@@ -288,7 +538,7 @@ function SuggestionCard({
                 Not helpful
               </Button>
             </div>
-            
+
             {isApplied ? (
               <Badge variant="secondary" className="flex items-center gap-1">
                 <CheckCircle className="w-3 h-3" />

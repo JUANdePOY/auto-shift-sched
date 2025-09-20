@@ -7,7 +7,7 @@ A full-stack application for automated employee shift scheduling with React Type
 - **Employee Management**: CRUD operations for employees with skills and availability tracking
 - **Shift Scheduling**: Create, view, update, and delete shifts with required skills and employee assignments
 - **Weekly View**: Calendar interface for viewing and managing weekly schedules
-- **Automated Scheduling**: (Planned) Algorithm for automatically assigning employees to shifts based on skills and availability
+- **Automated Scheduling**: (Planned) Algorithm for automatically assigning employees to shiftsc based on skills and availability
 
 ## Tech Stack
 

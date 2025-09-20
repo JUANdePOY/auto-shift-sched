@@ -112,17 +112,120 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+// POST bulk create shifts
+router.post('/bulk', async (req, res, next) => {
+  const shifts = req.body;
+
+  if (!Array.isArray(shifts)) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: 'Request body must be an array of shifts'
+    });
+  }
+
+  if (shifts.length === 0) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: 'At least one shift must be provided'
+    });
+  }
+
+  if (shifts.length > 50) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: 'Maximum 50 shifts can be created at once'
+    });
+  }
+
+  const connection = await db.promise().getConnection();
+  const startTime = Date.now();
+  const createdShifts = [];
+  const errors = [];
+
+  try {
+    await connection.beginTransaction();
+
+    for (let i = 0; i < shifts.length; i++) {
+      const shift = shifts[i];
+      const { title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department } = shift;
+
+      // Validation
+      if (!title || !startTime || !endTime || !date) {
+        errors.push({ index: i, error: 'title, startTime, endTime, and date are required' });
+        continue;
+      }
+
+      const query = `
+        INSERT INTO shifts (title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const values = [
+        title,
+        startTime,
+        endTime,
+        date,
+        JSON.stringify(requiredStation || []),
+        requiredEmployees || 1,
+        JSON.stringify(assignedEmployees || []),
+        Boolean(isCompleted),
+        priority || 'medium',
+        department || 'general'
+      ];
+
+      try {
+        const [result] = await connection.query(query, values);
+
+        // Get the created shift
+        const [newShift] = await connection.query('SELECT * FROM shifts WHERE id = ?', [result.insertId]);
+        createdShifts.push(formatShift(newShift[0]));
+
+      } catch (shiftError) {
+        errors.push({ index: i, error: shiftError.message });
+      }
+    }
+
+    if (errors.length > 0 && createdShifts.length === 0) {
+      // No shifts created successfully, rollback
+      await connection.rollback();
+      return res.status(400).json({
+        error: 'Bulk Creation Failed',
+        message: 'No shifts were created due to validation errors',
+        errors
+      });
+    }
+
+    await connection.commit();
+
+    const duration = Date.now() - startTime;
+    console.log(`Bulk created ${createdShifts.length} shifts in ${duration}ms`);
+
+    res.status(201).json({
+      message: `Successfully created ${createdShifts.length} shifts`,
+      shifts: createdShifts,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error in bulk shift creation:', error);
+    next(error);
+  } finally {
+    connection.release();
+  }
+});
+
 // DELETE shift
 router.delete('/:id', async (req, res, next) => {
   const { id } = req.params;
-  
+
   try {
     const [result] = await db.promise().query('DELETE FROM shifts WHERE id = ?', [id]);
-    
+
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Shift not found' });
     }
-    
+
     res.json({ message: 'Shift deleted successfully' });
   } catch (error) {
     next(error);

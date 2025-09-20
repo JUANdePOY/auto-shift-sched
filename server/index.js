@@ -7,6 +7,7 @@ const errorHandler = require('./shared/middleware/errorHandler');
 const employeeRoutes = require('./features/employees/routes/employees');
 const shiftRoutes = require('./features/schedule/routes/shifts');
 const scheduleRoutes = require('./features/schedule/routes/schedule');
+const scheduleGenerationRoutes = require('./features/schedule/routes/scheduleGeneration');
 const assignmentRoutes = require('./features/schedule/routes/assignments');
 const departmentRoutes = require('./features/employees/routes/departments');
 const availabilityRoutes = require('./features/availability/routes/availability');
@@ -116,42 +117,44 @@ const createDepartmentsTableQuery = `
           console.error('Error getting database connection after creation:', err);
           return res.status(500).send('Error getting database connection after creation: ' + err.message);
         }
-        
+
         connection.query(createEmployeesTableQuery, (error, results) => {
           if (error) {
             connection.release();
             console.error('Error setting up employees table:', error);
             return res.status(500).send('Error setting up employees table: ' + error.message);
           }
-          
+
           connection.query(createSchedulesTableQuery, (error, results) => {
             if (error) {
               connection.release();
               console.error('Error setting up shifts table:', error);
               return res.status(500).send('Error setting up shifts table: ' + error.message);
             }
-            
+
             connection.query(createDepartmentsTableQuery, (error, results) => {
               if (error) {
                 connection.release();
                 console.error('Error setting up departments table:', error);
                 return res.status(500).send('Error setting up departments table: ' + error.message);
               }
-              
+
               connection.query(createStationsTableQuery, (error, results) => {
                 if (error) {
                   connection.release();
                   console.error('Error setting up stations table:', error);
                   return res.status(500).send('Error setting up stations table: ' + error.message);
                 }
-                
+
                 connection.query(createTimeoffTableQuery, (error, results) => {
                   connection.release();
                   if (error) {
                     console.error('Error setting up timeoff table:', error);
                     return res.status(500).send('Error setting up timeoff table: ' + error.message);
                   }
-                  res.status(200).send('Database and tables created or already exist.');
+
+                  // Insert sample departments and stations
+                  insertSampleData(setupDbPool, res);
                 });
               });
             });
@@ -162,6 +165,69 @@ const createDepartmentsTableQuery = `
   });
 });
 
+// Function to insert sample departments and stations
+function insertSampleData(dbPool, res) {
+  dbPool.getConnection((err, connection) => {
+    if (err) {
+      console.error('Error getting connection for sample data:', err);
+      return res.status(500).send('Error inserting sample data: ' + err.message);
+    }
+
+    // Insert sample departments
+    const departments = [
+      { name: 'Kitchen' },
+      { name: 'Service' },
+      { name: 'Bar' },
+      { name: 'Management' }
+    ];
+
+    let completedInserts = 0;
+    const totalInserts = departments.length;
+
+    departments.forEach((dept, index) => {
+      connection.query('INSERT INTO departments (name) VALUES (?)', [dept.name], (error, results) => {
+        if (error) {
+          connection.release();
+          console.error('Error inserting department:', error);
+          return res.status(500).send('Error inserting sample departments: ' + error.message);
+        }
+
+        const departmentId = results.insertId;
+
+        // Insert stations for this department
+        const stations = getStationsForDepartment(dept.name);
+        stations.forEach((station, stationIndex) => {
+          connection.query('INSERT INTO stations (name, departmentId) VALUES (?, ?)', [station, departmentId], (stationError, stationResults) => {
+            if (stationError) {
+              connection.release();
+              console.error('Error inserting station:', stationError);
+              return res.status(500).send('Error inserting sample stations: ' + stationError.message);
+            }
+
+            completedInserts++;
+            if (completedInserts === totalInserts) {
+              connection.release();
+              res.status(200).send('Database, tables, and sample data created successfully.');
+            }
+          });
+        });
+      });
+    });
+  });
+}
+
+// Helper function to get stations for each department
+function getStationsForDepartment(departmentName) {
+  const stationMap = {
+    'Kitchen': ['Grill Station', 'Prep Station', 'Fry Station', 'Salad Station', 'Dish Station'],
+    'Service': ['Host Station', 'Server Station', 'Bus Station', 'Takeout Station'],
+    'Bar': ['Main Bar', 'Service Bar', 'Wine Station', 'Cocktail Station'],
+    'Management': ['Office', 'Floor Manager', 'Shift Lead']
+  };
+
+  return stationMap[departmentName] || ['General Station'];
+}
+
 // Basic route
 app.get('/', (req, res) => {
   res.send('Hello from the backend server!');
@@ -171,6 +237,7 @@ app.get('/', (req, res) => {
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shifts', shiftRoutes);
 app.use('/api/schedule', scheduleRoutes);
+app.use('/api/schedule-generation', scheduleGenerationRoutes);
 app.use('/api/shifts', assignmentRoutes); // Assignment routes are mounted under /api/shifts
 app.use('/api/departments', departmentRoutes);
 app.use('/api/availability', availabilityRoutes);
@@ -179,6 +246,8 @@ app.use('/api/availability', availabilityRoutes);
 app.use(errorHandler);
 
 // Start the server
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Server is running on http://0.0.0.0:${port}`);
 });
+
+module.exports = app;

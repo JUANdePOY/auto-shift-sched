@@ -1,21 +1,29 @@
-# Fix Availability API 400 Errors
+# Schedule Components Cleanup and Refactoring
 
-## Tasks
-- [x] Analyze the 400 error issue with /api/availability/week/:weekStart endpoint
-- [x] Identify missing endpoint in server routes
-- [x] Add GET /week/:weekStart endpoint to availability routes
-- [ ] Test the new endpoint functionality
+## Phase 1: Clean Unnecessary Files
+- [ ] Remove `ProfessionalDateNavigation.tsx` (duplicate of UnifiedScheduleNavigation)
+- [ ] Remove duplicate `AISuggestionPanel.tsx` from schedule/components (keep the one in ai-suggestions)
+- [ ] Verify no components are importing the removed files
 
-## Root Cause
-The frontend AdminAvailabilityGrid component calls availabilityService.getWeeklySubmissions() which makes a GET request to /api/availability/week/:weekStart, but this endpoint was not defined in the server routes, causing 400 Bad Request errors.
+## Phase 2: Create Custom Hooks
+- [ ] Create `useScheduleNavigation.ts` - Handle week/day navigation logic
+- [ ] Create `useScheduleData.ts` - Handle data fetching and processing
+- [ ] Create `useKeyboardNavigation.ts` - Handle keyboard shortcuts
 
-## Solution
-Added the missing endpoint to server/features/availability/routes/availability.js with proper validation and database querying.
+## Phase 3: Create UI Components
+- [ ] Create `ScheduleHeader.tsx` - Header with title, filters, and actions
+- [ ] Create `ScheduleContent.tsx` - Main content area with tabs
+- [ ] Create `ScheduleActions.tsx` - Action buttons and dialogs
 
-## Changes Made
-- Added GET /week/:weekStart endpoint that:
-  - Validates weekStart parameter using validateWeekStartStatus middleware
-  - Queries availability_submissions table joined with employees table
-  - Returns all submissions for the given week with employee details
-  - Uses safeJsonParse for availability data
-  - Includes proper error handling
+## Phase 4: Refactor ScheduleView.tsx
+- [ ] Simplify main ScheduleView component
+- [ ] Extract business logic to custom hooks
+- [ ] Move UI sections to separate components
+- [ ] Clean up props interface
+
+## Phase 5: Testing and Verification
+- [ ] Test navigation functionality
+- [ ] Test schedule data loading
+- [ ] Test keyboard shortcuts
+- [ ] Verify all imports/exports work correctly
+- [ ] Run application to ensure no breaking changes

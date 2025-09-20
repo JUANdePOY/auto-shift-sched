@@ -1,6 +1,6 @@
 import type { Employee } from '../../shared/types';
 
-const API_URL = 'http://localhost:3001/api/employees';
+const API_URL = `http://${window.location.hostname}:3001/api/employees`;
 
 /**
  * Fetches all employees from the API.
