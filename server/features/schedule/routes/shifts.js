@@ -37,18 +37,17 @@ router.get('/range', async (req, res, next) => {
 
 // POST create new shift
 router.post('/', async (req, res, next) => {
-  const { title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department } = req.body;
-  
+  const { title, startTime, endTime, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department } = req.body;
+
   const query = `
-    INSERT INTO shifts (title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO shifts (title, startTime, endTime, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
-  
+
   const values = [
     title,
     startTime,
     endTime,
-    date,
     JSON.stringify(requiredStation || []),
     requiredEmployees || 1,
     JSON.stringify(assignedEmployees || []),
@@ -73,19 +72,18 @@ router.post('/', async (req, res, next) => {
 // PUT update shift
 router.put('/:id', async (req, res, next) => {
   const { id } = req.params;
-  const { title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department } = req.body;
-  
+  const { title, startTime, endTime, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department } = req.body;
+
   const query = `
-    UPDATE shifts 
-    SET title = ?, startTime = ?, endTime = ?, date = ?, requiredStation = ?, requiredEmployees = ?, assignedEmployees = ?, isCompleted = ?, priority = ?, department = ?
+    UPDATE shifts
+    SET title = ?, startTime = ?, endTime = ?, requiredStation = ?, requiredEmployees = ?, assignedEmployees = ?, isCompleted = ?, priority = ?, department = ?
     WHERE id = ?
   `;
-  
+
   const values = [
     title,
     startTime,
     endTime,
-    date,
     JSON.stringify(requiredStation || []),
     requiredEmployees,
     JSON.stringify(assignedEmployees || []),
@@ -147,24 +145,23 @@ router.post('/bulk', async (req, res, next) => {
 
     for (let i = 0; i < shifts.length; i++) {
       const shift = shifts[i];
-      const { title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department } = shift;
+      const { title, startTime, endTime, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department } = shift;
 
       // Validation
-      if (!title || !startTime || !endTime || !date) {
-        errors.push({ index: i, error: 'title, startTime, endTime, and date are required' });
+      if (!title || !startTime || !endTime) {
+        errors.push({ index: i, error: 'title, startTime, and endTime are required' });
         continue;
       }
 
       const query = `
-        INSERT INTO shifts (title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO shifts (title, startTime, endTime, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const values = [
         title,
         startTime,
         endTime,
-        date,
         JSON.stringify(requiredStation || []),
         requiredEmployees || 1,
         JSON.stringify(assignedEmployees || []),

@@ -18,6 +18,7 @@ interface ShiftAssignment {
   requiredStation: string[];
   assignedEmployee?: Employee;
   status: 'unassigned' | 'assigned' | 'conflict';
+  type: 'opener' | 'mid' | 'closer' | 'graveyard';
 }
 
 interface EditShiftDialogProps {

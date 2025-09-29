@@ -167,12 +167,12 @@ class ScheduleGenerationService {
    */
   async getScheduleAssignments(generationId) {
     const [results] = await db.promise().query(
-      `SELECT sa.*, e.name as employee_name, s.title as shift_title, s.date, s.start_time, s.end_time
+      `SELECT sa.*, e.name as employee_name, s.title as shift_title, sa.assignment_date as date, s.start_time, s.end_time
        FROM schedule_assignments sa
        JOIN employees e ON sa.employee_id = e.id
        JOIN shifts s ON sa.shift_id = s.id
        WHERE sa.schedule_generation_id = ?
-       ORDER BY s.date, s.start_time`,
+       ORDER BY sa.assignment_date, s.start_time`,
       [generationId]
     );
 
@@ -227,7 +227,7 @@ class ScheduleGenerationService {
   /**
    * Store schedule assignments with professional bulk insertion
    * @param {number} generationId - Schedule generation ID
-   * @param {Array} assignments - List of assignments [{shiftId, employeeId}]
+   * @param {Array} assignments - List of assignments [{shiftId, employeeId, date}]
    * @throws {Error} If validation fails or database operation fails
    */
   async storeAssignments(generationId, assignments) {
@@ -248,8 +248,8 @@ class ScheduleGenerationService {
     // Validate each assignment
     for (let i = 0; i < assignments.length; i++) {
       const assignment = assignments[i];
-      if (!assignment.shiftId || !assignment.employeeId) {
-        throw new Error(`Invalid assignment at index ${i}: shiftId and employeeId are required`);
+      if (!assignment.shiftId || !assignment.employeeId || !assignment.date) {
+        throw new Error(`Invalid assignment at index ${i}: shiftId, employeeId, and date are required`);
       }
       if (typeof assignment.shiftId !== 'number' || typeof assignment.employeeId !== 'number') {
         throw new Error(`Invalid assignment at index ${i}: shiftId and employeeId must be numbers`);
@@ -268,12 +268,13 @@ class ScheduleGenerationService {
         generationId,
         assignment.shiftId,
         assignment.employeeId,
+        assignment.date,
         new Date()
       ]);
 
       // Bulk insert with IGNORE to handle potential duplicates gracefully
       const [result] = await connection.query(
-        'INSERT IGNORE INTO schedule_assignments (schedule_generation_id, shift_id, employee_id, assigned_at) VALUES ?',
+        'INSERT IGNORE INTO schedule_assignments (schedule_generation_id, shift_id, employee_id, assignment_date, assigned_at) VALUES ?',
         [values]
       );
 
@@ -373,9 +374,11 @@ class ScheduleGenerationService {
     switch (suggestionType) {
       case 'assignment':
         if (changes.action === 'assign') {
+          // Get week start for date
+          const weekStart = await this.getWeekStartFromGeneration(generationId);
           await db.promise().query(
-            'INSERT INTO schedule_assignments (schedule_generation_id, shift_id, employee_id, assigned_at) VALUES (?, ?, ?, NOW())',
-            [generationId, changes.shiftId, changes.employeeId]
+            'INSERT INTO schedule_assignments (schedule_generation_id, shift_id, employee_id, assignment_date, assigned_at) VALUES (?, ?, ?, ?, NOW())',
+            [generationId, changes.shiftId, changes.employeeId, weekStart]
           );
         }
         break;

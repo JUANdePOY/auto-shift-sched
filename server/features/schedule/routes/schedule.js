@@ -10,24 +10,44 @@ const router = express.Router();
 // GET weekly schedule with conflicts
 router.get('/week', async (req, res, next) => {
   const { startDate } = req.query;
-  
+
   if (!startDate) {
     return res.status(400).json({ error: 'startDate query parameter is required' });
   }
-  
+
   try {
     // Calculate end date (7 days after start date)
     const startDateObj = new Date(startDate);
     const endDateObj = new Date(startDateObj);
     endDateObj.setDate(startDateObj.getDate() + 6); // 7 days total including start date
     const endDate = endDateObj.toISOString().split('T')[0];
-    
-    // Fetch shifts for the week
-    const query = 'SELECT * FROM shifts WHERE date BETWEEN ? AND ?';
+
+    // Fetch assigned shifts for the week from schedule_assignments
+    const query = `
+      SELECT sa.*, s.title, s.startTime, s.endTime, s.requiredEmployees,
+             e.name as employee_name, sa.assignment_date as date
+      FROM schedule_assignments sa
+      JOIN shifts s ON sa.shift_id = s.id
+      JOIN employees e ON sa.employee_id = e.id
+      WHERE sa.assignment_date BETWEEN ? AND ?
+      ORDER BY sa.assignment_date, s.startTime
+    `;
     const [results] = await db.promise().query(query, [startDate, endDate]);
-    
-    const shifts = results.map(shift => formatShift(shift));
-    
+
+    const shifts = results.map(row => ({
+      id: row.shift_id,
+      title: row.title,
+      date: row.date,
+      startTime: row.startTime,
+      endTime: row.endTime,
+      requiredEmployees: row.requiredEmployees,
+      assignedEmployees: [{
+        id: row.employee_id,
+        name: row.employee_name
+      }],
+      department: row.department || 'General'
+    }));
+
     // For now, return empty conflicts and suggestions
     // In a real implementation, you would detect conflicts here
     const weeklySchedule = {
@@ -38,7 +58,7 @@ router.get('/week', async (req, res, next) => {
       coverageRate: calculateCoverageRate(shifts),
       scheduleEfficiency: 75 // Placeholder
     };
-    
+
     res.json(weeklySchedule);
   } catch (error) {
     next(error);
@@ -48,22 +68,36 @@ router.get('/week', async (req, res, next) => {
 // GET schedule conflicts
 router.get('/conflicts', async (req, res, next) => {
   const { startDate, endDate } = req.query;
-  
-  let query = 'SELECT * FROM shifts';
+
+  let query = `
+    SELECT sa.*, s.title, s.startTime, s.endTime, e.name as employee_name, sa.assignment_date as date
+    FROM schedule_assignments sa
+    JOIN shifts s ON sa.shift_id = s.id
+    JOIN employees e ON sa.employee_id = e.id
+  `;
   let params = [];
-  
+
   if (startDate && endDate) {
-    query += ' WHERE date BETWEEN ? AND ?';
+    query += ' WHERE sa.assignment_date BETWEEN ? AND ?';
     params = [startDate, endDate];
   }
-  
+
   try {
     const [results] = await db.promise().query(query, params);
-    const shifts = results.map(shift => formatShift(shift));
-    
+    const assignments = results.map(row => ({
+      id: row.id,
+      shiftId: row.shift_id,
+      employeeId: row.employee_id,
+      employeeName: row.employee_name,
+      shiftTitle: row.title,
+      date: row.date,
+      startTime: row.startTime,
+      endTime: row.endTime
+    }));
+
     // Simple conflict detection - in a real implementation, this would be more sophisticated
-    const conflicts = detectScheduleConflicts(shifts);
-    
+    const conflicts = detectScheduleConflicts(assignments);
+
     res.json(conflicts);
   } catch (error) {
     next(error);
@@ -73,11 +107,11 @@ router.get('/conflicts', async (req, res, next) => {
 // POST generate automated schedule
 router.post('/generate', async (req, res, next) => {
   const { startDate, endDate } = req.body;
-  
+
   if (!startDate || !endDate) {
     return res.status(400).json({ error: 'startDate and endDate are required' });
   }
-  
+
   try {
     const schedule = await ShiftScheduler.generateSchedule(startDate, endDate);
     res.json(schedule);
@@ -90,11 +124,11 @@ router.post('/generate', async (req, res, next) => {
 // POST suggest employees for a shift
 router.post('/suggest-employee', async (req, res, next) => {
   const { shiftId } = req.body;
-  
+
   if (!shiftId) {
     return res.status(400).json({ error: 'shiftId is required' });
   }
-  
+
   try {
     const suggestions = await SuggestionEngine.getEmployeeSuggestions(shiftId);
     res.json(suggestions);
@@ -106,11 +140,11 @@ router.post('/suggest-employee', async (req, res, next) => {
 // Helper function to calculate coverage rate
 function calculateCoverageRate(shifts) {
   if (shifts.length === 0) return 100;
-  
-  const coveredShifts = shifts.filter(shift => 
+
+  const coveredShifts = shifts.filter(shift =>
     shift.assignedEmployees.length >= shift.requiredEmployees
   ).length;
-  
+
   return Math.round((coveredShifts / shifts.length) * 100);
 }
 
@@ -157,73 +191,71 @@ router.post('/save-final', async (req, res, next) => {
     for (const assignment of assignments) {
       let shiftId = assignment.shiftId;
 
-      // If shiftId is a string (temporary ID), we need to find or create the actual shift
+      // If shiftId is a string (temporary ID), we need to find or create the actual shift template
       if (typeof shiftId === 'string' && shiftId.startsWith('shift-')) {
-        // Try to find existing shift by title, date, and time
+        // Try to find existing shift template by title and time (no date since templates don't have dates)
         const [existingShifts] = await connection.query(
-          'SELECT id FROM shifts WHERE title = ? AND date = ? AND startTime = ? AND endTime = ? LIMIT 1',
-          [assignment.shiftTitle, date, assignment.startTime || assignment.time, assignment.endTime || assignment.time]
+          'SELECT id FROM shifts WHERE title = ? AND startTime = ? AND endTime = ? LIMIT 1',
+          [assignment.shiftTitle, assignment.startTime || assignment.time, assignment.endTime || assignment.time]
         );
 
         if (existingShifts.length > 0) {
           shiftId = existingShifts[0].id;
         } else {
-          // Create new shift if it doesn't exist
+          // Create new shift template if it doesn't exist
           const shiftData = {
             title: assignment.shiftTitle,
             startTime: assignment.startTime || assignment.time,
             endTime: assignment.endTime || assignment.time,
-            date: date,
-            requiredStation: assignment.requiredStations || [],
             requiredEmployees: 1,
-            assignedEmployees: [assignment.employeeId],
-            isCompleted: true,
-            priority: 'medium',
-            department: assignment.department
+            department: assignment.department,
+            priority: 'medium'
           };
 
           const [shiftResult] = await connection.query(
-            'INSERT INTO shifts (title, startTime, endTime, date, requiredStation, requiredEmployees, assignedEmployees, isCompleted, priority, department) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO shifts (title, startTime, endTime, requiredEmployees, department, priority) VALUES (?, ?, ?, ?, ?, ?)',
             [
               shiftData.title,
               shiftData.startTime,
               shiftData.endTime,
-              shiftData.date,
-              JSON.stringify(shiftData.requiredStation),
               shiftData.requiredEmployees,
-              JSON.stringify(shiftData.assignedEmployees),
-              shiftData.isCompleted,
-              shiftData.priority,
-              shiftData.department
+              shiftData.department,
+              shiftData.priority
             ]
           );
           shiftId = shiftResult.insertId;
         }
       }
 
-      // Check if this assignment already exists to avoid duplicates
+      // Create assignment record with the specific date
       const [existingAssignment] = await connection.query(
-        'SELECT id FROM final_schedule WHERE schedule_generation_id = ? AND shift_id = ? AND employee_id = ?',
-        [scheduleGenerationId, shiftId, assignment.employeeId]
+        'SELECT id FROM schedule_assignments WHERE schedule_generation_id = ? AND shift_id = ? AND employee_id = ? AND assignment_date = ?',
+        [scheduleGenerationId, shiftId, assignment.employeeId, date]
       );
 
       if (existingAssignment.length === 0) {
-        finalAssignments.push([
-          scheduleGenerationId,
-          shiftId,
-          assignment.employeeId,
-          assignment.timeIn || null,
-          assignment.timeOut || null,
-          assignment.employeeName,
-          assignment.shiftTitle,
-          assignment.department,
-          date,
-          JSON.stringify(assignment.requiredStations || [])
-        ]);
+        await connection.query(
+          'INSERT INTO schedule_assignments (schedule_generation_id, shift_id, employee_id, assignment_date, assigned_at) VALUES (?, ?, ?, ?, NOW())',
+          [scheduleGenerationId, shiftId, assignment.employeeId, date]
+        );
       }
+
+      // Also save to final_schedule for legacy compatibility
+      finalAssignments.push([
+        scheduleGenerationId,
+        shiftId,
+        assignment.employeeId,
+        assignment.timeIn || null,
+        assignment.timeOut || null,
+        assignment.employeeName,
+        assignment.shiftTitle,
+        assignment.department,
+        date,
+        JSON.stringify(assignment.requiredStations || [])
+      ]);
     }
 
-    // Insert all assignments into final_schedule table
+    // Insert all assignments into final_schedule table for legacy compatibility
     if (finalAssignments.length > 0) {
       const assignmentQuery = `
         INSERT INTO final_schedule (schedule_generation_id, shift_id, employee_id, time_in, time_out, employee_name, shift_title, department, date_schedule, required_stations)

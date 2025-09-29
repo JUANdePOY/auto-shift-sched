@@ -25,7 +25,7 @@ import { AISuggestionsPanel } from '../../ai-suggestions/components/AISuggestion
 import EditShiftDialog from './EditShiftDialog';
 import type { Employee, Department } from '../../../features/shared/types';
 import { getAllDepartments } from '../../employees/services/departmentService';
-import { createShift } from '../services/scheduleService';
+import { createShift, getAllShifts } from '../services/scheduleService';
 
 interface ShiftAssignment {
   id: string;
@@ -35,6 +35,7 @@ interface ShiftAssignment {
   requiredStation: string[];
   assignedEmployee?: Employee;
   status: 'unassigned' | 'assigned' | 'conflict';
+  type: 'opener' | 'mid' | 'closer' | 'graveyard';
 }
 
 interface ShiftAssignmentPanelProps {
@@ -54,6 +55,15 @@ const calculateEndTime = (startTime: string): string => {
   return startDate.toTimeString().slice(0, 5); // HH:MM format
 };
 
+// Helper function to determine shift type based on start time
+const getShiftType = (time: string): 'opener' | 'mid' | 'closer' | 'graveyard' => {
+  const hour = parseInt(time.split(':')[0], 10);
+  if (hour >= 6 && hour < 12) return 'opener';
+  if (hour >= 12 && hour < 18) return 'mid';
+  if (hour >= 18 && hour < 24) return 'closer';
+  return 'graveyard'; // 00:00 to 05:59
+};
+
 const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
   isOpen,
   onClose,
@@ -66,6 +76,7 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
   const [departments, setDepartments] = useState<Department[]>([]);
   const [stations, setStations] = useState<{ id: string; name: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(date);
+  const [typeFilter, setTypeFilter] = useState<string>('all');
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingShift, setEditingShift] = useState<ShiftAssignment | null>(null);
@@ -124,31 +135,28 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
 
   // Initialize shift assignments when departments are loaded or selectedDate changes
   useEffect(() => {
-    if (isOpen && assignments.length === 0 && departments.length > 0 && stations.length > 0) {
-      const initialAssignments: ShiftAssignment[] = [];
-      const timeSlots = [
-        '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00', '09:30',
-        '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
-        '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
-        '18:00', '18:30', '19:00', '19:30', '20:00', '20:30'
-      ];
+    const loadShifts = async () => {
+      if (isOpen && assignments.length === 0 && departments.length > 0 && stations.length > 0) {
+        try {
+          const fetchedShifts = await getAllShifts();
+          const initialAssignments: ShiftAssignment[] = fetchedShifts.map(shift => ({
+            id: shift.id,
+            time: shift.startTime,
+            title: shift.title,
+            department: shift.department || departments[0]?.name || 'General',
+            requiredStation: Array.isArray(shift.requiredStation) ? shift.requiredStation : [],
+            status: 'unassigned',
+            type: getShiftType(shift.startTime)
+          }));
+          setAssignments(initialAssignments);
+        } catch (error) {
+          console.error('Failed to fetch shifts:', error);
+          toast.error('Failed to load shifts from database');
+        }
+      }
+    };
 
-      timeSlots.forEach((time, index) => {
-        const department = departments[Math.floor(Math.random() * departments.length)];
-        const station = department.stations[Math.floor(Math.random() * department.stations.length)];
-
-        initialAssignments.push({
-          id: `shift-${index + 1}`,
-          time,
-          title: `${department.name.charAt(0).toUpperCase() + department.name.slice(1)} Shift`,
-          department: department.name,
-          requiredStation: [station.name],
-          status: 'unassigned'
-        });
-      });
-
-      setAssignments(initialAssignments);
-    }
+    loadShifts();
   }, [isOpen, assignments.length, departments, stations, selectedDate]);
 
   const getAvailableEmployees = (shift: ShiftAssignment) => {
@@ -312,7 +320,8 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
       title: newShiftForm.title,
       department: newShiftForm.department,
       requiredStation: newShiftForm.requiredStation,
-      status: 'unassigned'
+      status: 'unassigned',
+      type: getShiftType(newShiftForm.time)
     };
 
     setAssignments(prev => [...prev, newAssignment]);
@@ -357,6 +366,7 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
             time: editForm.startTime,
             department: editForm.department,
             requiredStation: editForm.requiredStation,
+            type: getShiftType(editForm.startTime),
             // If the assigned employee no longer matches the new department/stations, unassign them
             assignedEmployee: assignment.assignedEmployee &&
               getAvailableEmployees({
@@ -385,13 +395,15 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
     setEditingShift(null);
   };
 
-  const assignedCount = assignments.filter(a => a.status === 'assigned').length;
-  const totalCount = assignments.length;
-
   if (!isOpen) return null;
 
-  // Sort assignments by time for table display
-  const sortedAssignments = [...assignments].sort((a, b) => a.time.localeCompare(b.time));
+  // Sort assignments by time for table display and apply type filter
+  const sortedAssignments = [...assignments]
+    .filter(assignment => typeFilter === 'all' || assignment.type === typeFilter)
+    .sort((a, b) => a.time.localeCompare(b.time));
+
+  const assignedCount = sortedAssignments.filter(a => a.status === 'assigned').length;
+  const totalCount = sortedAssignments.length;
 
   return (
     <div
@@ -497,6 +509,25 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
                   className="w-40"
                 />
               </div>
+
+              {/* Type Filter */}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="type-filter" className="text-sm font-medium">
+                  Type:
+                </Label>
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue placeholder="All types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="opener">Opener</SelectItem>
+                    <SelectItem value="mid">Mid</SelectItem>
+                    <SelectItem value="closer">Closer</SelectItem>
+                    <SelectItem value="graveyard">Graveyard</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="flex items-center gap-3">
@@ -526,6 +557,7 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
                 <TableRow className="hover:bg-muted/50">
                   <TableHead className="font-semibold text-foreground">Required Station(s)</TableHead>
                   <TableHead className="font-semibold text-foreground">Time In and Out</TableHead>
+                  <TableHead className="font-semibold text-foreground">Type</TableHead>
                   <TableHead className="font-semibold text-foreground">Assigned Employee</TableHead>
                   <TableHead className="font-semibold text-foreground">Status</TableHead>
                   <TableHead className="font-semibold text-foreground">Actions</TableHead>
@@ -558,6 +590,11 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
                         <span className="text-sm font-mono">
                           In: {assignment.time} Out: {calculateEndTime(assignment.time)}
                         </span>
+                      </TableCell>
+                      <TableCell className="py-4">
+                        <Badge variant="outline" className="capitalize">
+                          {assignment.type}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         {assignment.assignedEmployee ? (
