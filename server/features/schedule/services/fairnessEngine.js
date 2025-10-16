@@ -46,7 +46,7 @@ class FairnessEngine {
       const pastWeekEndStr = pastWeekEnd.toISOString().split('T')[0];
 
       // Query past week assignments
-      const [assignments] = await db.promise().query(`
+      const [assignments] = await db.query(`
         SELECT sa.*, s.startTime, s.endTime, s.title
         FROM schedule_assignments sa
         JOIN shifts s ON sa.shift_id = s.id

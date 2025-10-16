@@ -57,7 +57,7 @@ class SuggestionEngine {
    * Get shift by ID
    */
   async getShift(shiftId) {
-    const [results] = await db.promise().query('SELECT * FROM shifts WHERE id = ?', [shiftId]);
+    const [results] = await db.query('SELECT * FROM shifts WHERE id = ?', [shiftId]);
     return results.length > 0 ? formatShift(results[0]) : null;
   }
 
@@ -65,7 +65,7 @@ class SuggestionEngine {
    * Get all employees
    */
   async getEmployees() {
-    const [results] = await db.promise().query('SELECT * FROM employees');
+    const [results] = await db.query('SELECT * FROM employees');
     return results.map(employee => formatEmployee(employee));
   }
 

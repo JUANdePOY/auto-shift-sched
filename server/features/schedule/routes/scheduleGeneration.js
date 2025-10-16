@@ -92,7 +92,7 @@ router.get('/:id/suggestions', async (req, res, next) => {
 
     // Get suggestions from database
     const db = require('../../../shared/config/database');
-    const [suggestions] = await db.promise().query(
+    const [suggestions] = await db.query(
       `SELECT * FROM ai_suggestions
        WHERE schedule_generation_id = ?
        ORDER BY confidence_score DESC`,
@@ -178,7 +178,7 @@ router.get('/', async (req, res, next) => {
     query += ' ORDER BY generated_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), offset);
 
-    const [schedules] = await db.promise().query(query, params);
+    const [schedules] = await db.query(query, params);
 
     // Get total count
     let countQuery = 'SELECT COUNT(*) as total FROM schedule_generations';
@@ -189,7 +189,7 @@ router.get('/', async (req, res, next) => {
       countParams.push(status);
     }
 
-    const [countResult] = await db.promise().query(countQuery, countParams);
+    const [countResult] = await db.query(countQuery, countParams);
     const total = countResult[0].total;
 
     res.json({
@@ -215,7 +215,7 @@ router.delete('/:id', async (req, res, next) => {
     const db = require('../../../shared/config/database');
 
     // Check if schedule is draft
-    const [schedule] = await db.promise().query(
+    const [schedule] = await db.query(
       'SELECT status FROM schedule_generations WHERE id = ?',
       [id]
     );
@@ -235,7 +235,7 @@ router.delete('/:id', async (req, res, next) => {
     }
 
     // Delete schedule (cascade will delete assignments and suggestions)
-    await db.promise().query('DELETE FROM schedule_generations WHERE id = ?', [id]);
+    await db.query('DELETE FROM schedule_generations WHERE id = ?', [id]);
 
     res.json({
       message: 'Schedule deleted successfully'

@@ -11,7 +11,7 @@ router.post('/:id/assign', async (req, res, next) => {
   
   try {
     // First get the current shift to check assigned employees
-    const [shiftResults] = await db.promise().query('SELECT * FROM shifts WHERE id = ?', [id]);
+    const [shiftResults] = await db.query('SELECT * FROM shifts WHERE id = ?', [id]);
     
     if (shiftResults.length === 0) {
       return res.status(404).json({ error: 'Shift not found' });
@@ -40,10 +40,10 @@ router.post('/:id/assign', async (req, res, next) => {
     
     // Update the shift
     const updateQuery = 'UPDATE shifts SET assignedEmployees = ? WHERE id = ?';
-    await db.promise().query(updateQuery, [JSON.stringify(assignedEmployees), id]);
+    await db.query(updateQuery, [JSON.stringify(assignedEmployees), id]);
     
     // Return the updated shift
-    const [updatedShift] = await db.promise().query('SELECT * FROM shifts WHERE id = ?', [id]);
+    const [updatedShift] = await db.query('SELECT * FROM shifts WHERE id = ?', [id]);
     const formattedShift = formatShift(updatedShift[0]);
     
     res.json(formattedShift);
@@ -59,7 +59,7 @@ router.post('/:id/unassign', async (req, res, next) => {
   
   try {
     // First get the current shift to check assigned employees
-    const [shiftResults] = await db.promise().query('SELECT * FROM shifts WHERE id = ?', [id]);
+    const [shiftResults] = await db.query('SELECT * FROM shifts WHERE id = ?', [id]);
     
     if (shiftResults.length === 0) {
       return res.status(404).json({ error: 'Shift not found' });
@@ -88,10 +88,10 @@ router.post('/:id/unassign', async (req, res, next) => {
     
     // Update the shift
     const updateQuery = 'UPDATE shifts SET assignedEmployees = ? WHERE id = ?';
-    await db.promise().query(updateQuery, [JSON.stringify(assignedEmployees), id]);
+    await db.query(updateQuery, [JSON.stringify(assignedEmployees), id]);
     
     // Return the updated shift
-    const [updatedShift] = await db.promise().query('SELECT * FROM shifts WHERE id = ?', [id]);
+    const [updatedShift] = await db.query('SELECT * FROM shifts WHERE id = ?', [id]);
     const formattedShift = formatShift(updatedShift[0]);
     
     res.json(formattedShift);

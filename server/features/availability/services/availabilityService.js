@@ -23,7 +23,7 @@ class AvailabilityService {
    */
   async getAvailability(employeeId, weekStart) {
     try {
-      const [results] = await db.promise().query(
+      const [results] = await db.query(
         `SELECT * FROM availability_submissions 
          WHERE employee_id = ? AND week_start = ? 
          ORDER BY submission_date DESC LIMIT 1`,
@@ -32,7 +32,7 @@ class AvailabilityService {
 
       if (results.length === 0) {
         // Check if employee exists
-        const [employeeResult] = await db.promise().query(
+        const [employeeResult] = await db.query(
           'SELECT id FROM employees WHERE id = ?',
           [employeeId]
         );
@@ -73,7 +73,7 @@ class AvailabilityService {
   async submitAvailability(employeeId, weekStart, availability) {
     try {
       // Check if submissions are locked for this week
-      const [lockCheck] = await db.promise().query(
+      const [lockCheck] = await db.query(
         'SELECT is_locked FROM availability_submissions WHERE week_start = ? AND employee_id = ? ORDER BY submission_date DESC LIMIT 1',
         [weekStart, employeeId]
       );
@@ -94,7 +94,7 @@ class AvailabilityService {
         VALUES (?, ?, ?, NOW())
       `;
 
-      await db.promise().query(query, [
+      await db.query(query, [
         employeeId,
         weekStart,
         JSON.stringify(availability)
@@ -117,7 +117,7 @@ class AvailabilityService {
    */
   async lockAvailability(weekStart) {
     try {
-      const [result] = await db.promise().query(
+      const [result] = await db.query(
         `UPDATE availability_submissions 
          SET is_locked = TRUE 
          WHERE week_start = ? AND is_locked = FALSE`,
@@ -139,21 +139,21 @@ class AvailabilityService {
    */
   async getAvailabilityStatus(weekStart) {
     try {
-      const [submissionCount] = await db.promise().query(
+      const [submissionCount] = await db.query(
         `SELECT COUNT(DISTINCT employee_id) as total_submissions 
          FROM availability_submissions 
          WHERE week_start = ?`,
         [weekStart]
       );
 
-      const [lockedCount] = await db.promise().query(
+      const [lockedCount] = await db.query(
         `SELECT COUNT(*) as locked_count 
          FROM availability_submissions 
          WHERE week_start = ? AND is_locked = TRUE`,
         [weekStart]
       );
 
-      const [employeeCount] = await db.promise().query(
+      const [employeeCount] = await db.query(
         'SELECT COUNT(*) as total_employees FROM employees'
       );
 
@@ -175,7 +175,7 @@ class AvailabilityService {
    */
   async getWeeklySubmissions(weekStart) {
     try {
-      const [results] = await db.promise().query(
+      const [results] = await db.query(
         `SELECT 
           asub.id,
           asub.employee_id as employeeId,
@@ -216,7 +216,7 @@ class AvailabilityService {
    */
   async getAvailabilityHistory(employeeId) {
     try {
-      const [results] = await db.promise().query(
+      const [results] = await db.query(
         `SELECT week_start, availability, submission_date, is_locked 
          FROM availability_submissions 
          WHERE employee_id = ? 
@@ -239,6 +239,41 @@ class AvailabilityService {
       };
     } catch (error) {
       console.error('Error getting availability history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Admin submit/update availability for a week (bypasses locks and date checks)
+   */
+  async adminSubmitAvailability(employeeId, weekStart, availability) {
+    try {
+      // For admin, bypass lock and date checks
+      // Delete existing submissions for this employee and week to "update"
+      await db.query(
+        'DELETE FROM availability_submissions WHERE employee_id = ? AND week_start = ?',
+        [employeeId, weekStart]
+      );
+
+      const query = `
+        INSERT INTO availability_submissions (employee_id, week_start, availability, submission_date, is_locked)
+        VALUES (?, ?, ?, NOW(), FALSE)
+      `;
+
+      await db.query(query, [
+        employeeId,
+        weekStart,
+        JSON.stringify(availability)
+      ]);
+
+      return {
+        message: 'Availability updated successfully by admin',
+        employeeId,
+        weekStart,
+        availability
+      };
+    } catch (error) {
+      console.error('Error submitting admin availability:', error);
       throw error;
     }
   }

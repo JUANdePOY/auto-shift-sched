@@ -293,7 +293,7 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
 
                 {/* Employee Rows */}
                 {filteredSubmissions.map((submission) => (
-                  <React.Fragment key={submission.id}>
+                  <React.Fragment key={submission.employeeId}>
                     <div className="p-2 font-medium border border-border bg-muted/50 whitespace-nowrap">
                       {submission.employeeName}
                       <div className="text-xs text-muted-foreground">
@@ -308,8 +308,8 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
                     {daysOfWeek.map((day) => {
                       const dayAvail = submission.availability[day];
                       const isAvailable = dayAvail?.available || false;
-                      const start = dayAvail?.preferredStart || 'Any';
-                      const end = dayAvail?.preferredEnd || 'Any';
+                      const start = dayAvail?.startTime || dayAvail?.preferredStart || 'Any';
+                      const end = dayAvail?.endTime || dayAvail?.preferredEnd || 'Any';
                       const cellClass = isAvailable
                         ? 'bg-green-100 border-green-300 hover:bg-green-200'
                         : 'bg-destructive/10 border-destructive/30 hover:bg-destructive/20';
@@ -321,7 +321,10 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
                           title={isAvailable ? `${start} - ${end}` : 'Unavailable'}
                         >
                           {isAvailable ? (
-                            <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
+                            <div className="flex flex-col items-center">
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                              <span className="text-xs text-green-700 mt-1">{start} - {end}</span>
+                            </div>
                           ) : (
                             <XCircle className="w-4 h-4 text-destructive mx-auto" />
                           )}

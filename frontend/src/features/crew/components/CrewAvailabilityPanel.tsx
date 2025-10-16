@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../shared/components/ui/card';
 import { Button } from '../../shared/components/ui/button';
 import { Badge } from '../../shared/components/ui/badge';
-import { Checkbox } from '../../shared/components/ui/checkbox';
+
 import { Textarea } from '../../shared/components/ui/textarea';
 import { Input } from '../../shared/components/ui/input';
 import { Label } from '../../shared/components/ui/label';
-import { CalendarDays, Clock, Save, AlertCircle, Coffee } from 'lucide-react';
+import { CalendarDays, Clock, Save, AlertCircle, Coffee, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCrewData } from '../hooks/useCrewData';
 import type { CrewAvailability } from '../types';
 
@@ -31,10 +31,7 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
   const [error, setError] = useState<string | null>(null);
 
   const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-  const timeSlots = [
-    '06:00-08:00', '08:00-10:00', '10:00-12:00', '12:00-14:00',
-    '14:00-16:00', '16:00-18:00', '18:00-20:00', '20:00-22:00'
-  ];
+
 
   const handleWeekChange = async (weekStart: string) => {
     setSelectedWeek(weekStart);
@@ -108,6 +105,20 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
     return weeks;
   };
 
+  const goToPreviousWeek = () => {
+    const current = new Date(selectedWeek);
+    current.setDate(current.getDate() - 7);
+    const newWeekStart = current.toISOString().split('T')[0];
+    handleWeekChange(newWeekStart);
+  };
+
+  const goToNextWeek = () => {
+    const current = new Date(selectedWeek);
+    current.setDate(current.getDate() + 7);
+    const newWeekStart = current.toISOString().split('T')[0];
+    handleWeekChange(newWeekStart);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -140,6 +151,21 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
           <CardTitle className="text-lg">Select Week</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="flex items-center justify-between mb-4">
+            <Button onClick={goToPreviousWeek} variant="outline" size="sm">
+              <ChevronLeft className="w-4 h-4" />
+              Previous Week
+            </Button>
+            <div className="text-center">
+              <p className="text-sm font-medium">
+                Current: Week of {new Date(selectedWeek).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </p>
+            </div>
+            <Button onClick={goToNextWeek} variant="outline" size="sm">
+              Next Week
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
             {getNextWeeks().map((week) => (
               <Button
@@ -174,21 +200,46 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
               <div key={day} className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <Checkbox
-                      id={`${day}-available`}
-                      checked={isAvailable}
-                      onCheckedChange={(checked) =>
+                    <Button
+                      variant={isAvailable ? 'default' : 'outline'}
+                      size="sm"
+                      disabled={requestRestDay}
+                      onClick={() =>
                         handleAvailabilityChange(
                           day,
-                          checked as boolean,
-                          dayAvailability?.preferredTimes || [],
+                          !isAvailable,
+                          [],
                           dayAvailability?.startTime,
                           dayAvailability?.endTime,
                           requestRestDay,
                           dayAvailability?.notes
                         )
                       }
-                    />
+                      className="flex items-center gap-1"
+                    >
+                      <Clock className="w-3 h-3" />
+                      Available
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={requestRestDay}
+                      onClick={() =>
+                        handleAvailabilityChange(
+                          day,
+                          true,
+                          [],
+                          '00:00',
+                          '23:59',
+                          requestRestDay,
+                          dayAvailability?.notes
+                        )
+                      }
+                      className="flex items-center gap-1"
+                    >
+                      <Clock className="w-3 h-3" />
+                      Anytime
+                    </Button>
                     <label
                       htmlFor={`${day}-available`}
                       className="text-sm font-medium capitalize cursor-pointer"
@@ -200,17 +251,18 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
                   <Button
                     variant={requestRestDay ? 'destructive' : 'outline'}
                     size="sm"
-                    onClick={() =>
+                    onClick={() => {
+                      const newRequestRestDay = !requestRestDay;
                       handleAvailabilityChange(
                         day,
-                        isAvailable,
-                        dayAvailability?.preferredTimes || [],
-                        dayAvailability?.startTime,
-                        dayAvailability?.endTime,
-                        !requestRestDay,
+                        newRequestRestDay ? false : isAvailable,
+                        [],
+                        newRequestRestDay ? '' : dayAvailability?.startTime,
+                        newRequestRestDay ? '' : dayAvailability?.endTime,
+                        newRequestRestDay,
                         dayAvailability?.notes
-                      )
-                    }
+                      );
+                    }}
                     className="flex items-center gap-1"
                   >
                     <Coffee className="w-3 h-3" />
@@ -265,30 +317,7 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
                       </div>
                     </div>
 
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Preferred time slots:</p>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {timeSlots.map((slot) => {
-                          const isSelected = dayAvailability?.preferredTimes?.includes(slot) || false;
-                          return (
-                            <Button
-                              key={slot}
-                              variant={isSelected ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => {
-                                const currentTimes = dayAvailability?.preferredTimes || [];
-                                const newTimes = isSelected
-                                  ? currentTimes.filter(t => t !== slot)
-                                  : [...currentTimes, slot];
-                                handleAvailabilityChange(day, true, newTimes, dayAvailability?.startTime, dayAvailability?.endTime, false, dayAvailability?.notes);
-                              }}
-                            >
-                              {slot}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                    </div>
+
 
                     <div>
                       <p className="text-sm text-muted-foreground mb-2">Notes (optional):</p>

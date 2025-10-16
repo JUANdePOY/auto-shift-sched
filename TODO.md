@@ -1,20 +1,13 @@
-# Crew Profile Enhancement TODO
+# TODO: Implement Admin Settings View
 
-## Backend Changes
-- [x] Add change password endpoint to `server/features/auth/routes/auth.js`
-- [x] Implement password change logic with validation (current password verification, new password requirements)
+## Tasks
+- [ ] Update App.tsx to render Settings component for 'settings' view instead of showing toast
+- [ ] Add logout button to Navigation component
+- [ ] Test settings UI and logout functionality
+- [ ] Verify authentication persistence on page refresh
 
-## Frontend Types
-- [x] Update `frontend/src/features/crew/types/index.ts` - Add email to CrewProfile interface
-- [x] Update `frontend/src/features/auth/types/index.ts` - Add password change types
-
-## Frontend Services
-- [x] Update `frontend/src/features/auth/services/authService.ts` - Add changePassword method
-
-## Frontend Components
-- [x] Update `frontend/src/features/crew/components/CrewProfile.tsx` - Display email and add password change form
-
-## Testing
-- [ ] Test password change functionality end-to-end
-- [ ] Verify UI integration with existing profile layout
-- [ ] Ensure proper error handling and user feedback
+## Details
+- Settings component already exists with password change, system settings, and stats tabs
+- AuthContext and authService already support logout and changePassword
+- Navigation needs logout button in bottom section
+- App.tsx needs to allow 'settings' view and render Settings component

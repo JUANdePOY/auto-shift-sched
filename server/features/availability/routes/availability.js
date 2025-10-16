@@ -18,21 +18,21 @@ router.get('/status/:weekStart', validateWeekStartStatus, async (req, res, next)
   try {
     const { weekStart } = req.params;
 
-    const [submissionCount] = await db.promise().query(
+    const [submissionCount] = await db.query(
       `SELECT COUNT(DISTINCT employee_id) as total_submissions
        FROM availability_submissions
        WHERE week_start = ?`,
       [weekStart]
     );
 
-    const [lockedCount] = await db.promise().query(
+    const [lockedCount] = await db.query(
       `SELECT COUNT(*) as locked_count
        FROM availability_submissions
        WHERE week_start = ? AND is_locked = TRUE`,
       [weekStart]
     );
 
-    const [employeeCount] = await db.promise().query(
+    const [employeeCount] = await db.query(
       'SELECT COUNT(*) as total_employees FROM employees'
     );
 
@@ -58,7 +58,7 @@ router.get('/week/:weekStart', validateWeekStartStatus, async (req, res, next) =
     const { weekStart } = req.params;
     console.log('Received weekStart in /week/:weekStart:', weekStart);
 
-    const [results] = await db.promise().query(
+    const [results] = await db.query(
       `SELECT
         e.id as employeeId,
         e.name as employeeName,
@@ -119,7 +119,7 @@ router.get('/:employeeId/:weekStart', validateEmployeeId, validateWeekStart, asy
   try {
     const { employeeId, weekStart } = req.params;
 
-    const [results] = await db.promise().query(
+    const [results] = await db.query(
       `SELECT * FROM availability_submissions
        WHERE employee_id = ? AND week_start = ?
        ORDER BY submission_date DESC LIMIT 1`,
@@ -129,7 +129,7 @@ router.get('/:employeeId/:weekStart', validateEmployeeId, validateWeekStart, asy
     if (results.length === 0) {
       // Return default availability if no submission exists
       // Check if employee exists
-      const [employeeResult] = await db.promise().query(
+      const [employeeResult] = await db.query(
         'SELECT id FROM employees WHERE id = ?',
         [employeeId]
       );
@@ -178,7 +178,7 @@ router.post('/submit', availabilityValidationRules, handleValidationErrors, asyn
     const { employeeId, weekStart, availability } = req.body;
 
     // Check if submissions are locked for this week
-    const [lockCheck] = await db.promise().query(
+    const [lockCheck] = await db.query(
       'SELECT is_locked FROM availability_submissions WHERE week_start = ? AND employee_id = ? ORDER BY submission_date DESC LIMIT 1',
       [weekStart, employeeId]
     );
@@ -205,7 +205,7 @@ router.post('/submit', availabilityValidationRules, handleValidationErrors, asyn
       VALUES (?, ?, ?, NOW())
     `;
 
-    await db.promise().query(query, [
+    await db.query(query, [
       employeeId,
       weekStart,
       JSON.stringify(availability)
@@ -233,7 +233,7 @@ router.post('/admin/submit', availabilityValidationRules, handleValidationErrors
 
     // For admin, bypass lock and date checks
     // Delete existing submissions for this employee and week to "update"
-    await db.promise().query(
+    await db.query(
       'DELETE FROM availability_submissions WHERE employee_id = ? AND week_start = ?',
       [employeeId, weekStart]
     );
@@ -243,7 +243,7 @@ router.post('/admin/submit', availabilityValidationRules, handleValidationErrors
       VALUES (?, ?, ?, NOW(), FALSE)
     `;
 
-    await db.promise().query(query, [
+    await db.query(query, [
       employeeId,
       weekStart,
       JSON.stringify(availability)
@@ -270,7 +270,7 @@ router.put('/lock', async (req, res, next) => {
     const { weekStart } = req.body;
 
     // Lock all submissions for the week
-    const [result] = await db.promise().query(
+    const [result] = await db.query(
       `UPDATE availability_submissions
        SET is_locked = TRUE
        WHERE week_start = ? AND is_locked = FALSE`,
@@ -295,10 +295,10 @@ router.get('/history/:employeeId', validateEmployeeId, async (req, res, next) =>
   try {
     const { employeeId } = req.params;
 
-    const [results] = await db.promise().query(
-      `SELECT week_start, availability, submission_date, is_locked 
-       FROM availability_submissions 
-       WHERE employee_id = ? 
+    const [results] = await db.query(
+      `SELECT week_start, availability, submission_date, is_locked
+       FROM availability_submissions
+       WHERE employee_id = ?
        ORDER by week_start DESC, submission_date DESC`,
       [employeeId]
     );

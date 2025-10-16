@@ -14,6 +14,7 @@ import { LoginForm } from './features/auth/components/LoginForm';
 import { CrewDashboard } from './features/crew/components/CrewDashboard';
 import { CrewAvailabilityPanel } from './features/crew/components/CrewAvailabilityPanel';
 import { CrewProfileWrapper } from './features/crew/components/CrewProfileWrapper';
+import { Settings } from './features/admin/components/Settings'; 
 
 type AdminView = 'dashboard' | 'schedule' | 'employees' | 'availability' | 'settings';
 type CrewView = 'dashboard' | 'availability' | 'profile';
@@ -54,12 +55,6 @@ export default function App() {
   };
 
   const handleViewChange = (view: View) => {
-    if (view === 'settings') {
-      toast.info('Settings feature coming soon!', {
-        description: 'This would open the settings panel.'
-      });
-      return;
-    }
     setCurrentView(view);
   };
 
@@ -89,6 +84,9 @@ export default function App() {
               />
             </div>
           );
+
+        case 'settings':
+          return <Settings />;
 
         case 'dashboard':
         default:
@@ -195,3 +193,4 @@ export default function App() {
     </div>
   );
 }
+

@@ -65,7 +65,7 @@ class ScheduleGenerationService {
    * @returns {Promise<Object|null>} Schedule data or null
    */
   async getScheduleByWeek(weekStart) {
-    const [results] = await db.promise().query(
+    const [results] = await db.query(
       'SELECT * FROM schedule_generations WHERE week_start = ? ORDER BY generated_at DESC LIMIT 1',
       [weekStart]
     );
@@ -95,19 +95,19 @@ class ScheduleGenerationService {
   async publishSchedule(generationId, publishedBy) {
     try {
       // Update schedule status
-      await db.promise().query(
+      await db.query(
         'UPDATE schedule_generations SET status = ?, notes = CONCAT(IFNULL(notes, ""), " Published by user ", ?) WHERE id = ?',
         [this.status.PUBLISHED, publishedBy, generationId]
       );
 
       // Archive any previous published schedules for this week
-      const [schedule] = await db.promise().query(
+      const [schedule] = await db.query(
         'SELECT week_start FROM schedule_generations WHERE id = ?',
         [generationId]
       );
 
       if (schedule.length > 0) {
-        await db.promise().query(
+        await db.query(
           'UPDATE schedule_generations SET status = ? WHERE week_start = ? AND status = ? AND id != ?',
           [this.status.ARCHIVED, schedule[0].week_start, this.status.PUBLISHED, generationId]
         );
@@ -131,7 +131,7 @@ class ScheduleGenerationService {
   async applyAISuggestion(generationId, suggestionId, appliedBy) {
     try {
       // Get suggestion details
-      const [suggestion] = await db.promise().query(
+      const [suggestion] = await db.query(
         'SELECT * FROM ai_suggestions WHERE id = ? AND schedule_generation_id = ?',
         [suggestionId, generationId]
       );
@@ -147,7 +147,7 @@ class ScheduleGenerationService {
       await this.applySuggestionChanges(generationId, changes, suggestionData.suggestion_type);
 
       // Mark suggestion as applied
-      await db.promise().query(
+      await db.query(
         'UPDATE ai_suggestions SET applied = TRUE, applied_at = NOW() WHERE id = ?',
         [suggestionId]
       );
@@ -166,7 +166,7 @@ class ScheduleGenerationService {
    * @returns {Promise<Array>} List of assignments
    */
   async getScheduleAssignments(generationId) {
-    const [results] = await db.promise().query(
+    const [results] = await db.query(
       `SELECT sa.*, e.name as employee_name, s.title as shift_title, sa.assignment_date as date, s.start_time, s.end_time
        FROM schedule_assignments sa
        JOIN employees e ON sa.employee_id = e.id
@@ -185,7 +185,7 @@ class ScheduleGenerationService {
    * @returns {Promise<Object>} Schedule data
    */
   async getScheduleById(generationId) {
-    const [results] = await db.promise().query(
+    const [results] = await db.query(
       'SELECT * FROM schedule_generations WHERE id = ?',
       [generationId]
     );
@@ -216,7 +216,7 @@ class ScheduleGenerationService {
    * @returns {Promise<number>} Generation ID
    */
   async createScheduleGeneration(weekStart, generatedBy, options) {
-    const [result] = await db.promise().query(
+    const [result] = await db.query(
       'INSERT INTO schedule_generations (week_start, generated_by, status, notes) VALUES (?, ?, ?, ?)',
       [weekStart, generatedBy, this.status.DRAFT, options.notes || 'Auto-generated schedule']
     );
@@ -309,11 +309,11 @@ class ScheduleGenerationService {
   async generateAISuggestions(generationId, assignments) {
     try {
       // Get all employees and shifts for the week
-      const [employees] = await db.promise().query('SELECT * FROM employees');
+      const [employees] = await db.query('SELECT * FROM employees');
       const weekStart = await this.getWeekStartFromGeneration(generationId);
       const endDate = this.getWeekEndDate(weekStart);
 
-      const [shifts] = await db.promise().query(
+      const [shifts] = await db.query(
         'SELECT * FROM shifts WHERE date BETWEEN ? AND ?',
         [weekStart, endDate]
       );
@@ -350,7 +350,7 @@ class ScheduleGenerationService {
 
       // Store suggestions in database
       for (const suggestion of suggestions.slice(0, 10)) { // Limit to top 10
-        await db.promise().query(
+        await db.query(
           'INSERT INTO ai_suggestions (schedule_generation_id, suggestion_type, confidence_score, suggested_changes) VALUES (?, ?, ?, ?)',
           [generationId, suggestion.type, suggestion.confidence, JSON.stringify(suggestion.changes)]
         );
@@ -376,7 +376,7 @@ class ScheduleGenerationService {
         if (changes.action === 'assign') {
           // Get week start for date
           const weekStart = await this.getWeekStartFromGeneration(generationId);
-          await db.promise().query(
+          await db.query(
             'INSERT INTO schedule_assignments (schedule_generation_id, shift_id, employee_id, assignment_date, assigned_at) VALUES (?, ?, ?, ?, NOW())',
             [generationId, changes.shiftId, changes.employeeId, weekStart]
           );
@@ -399,7 +399,7 @@ class ScheduleGenerationService {
    * @returns {Promise<string>} Week start date
    */
   async getWeekStartFromGeneration(generationId) {
-    const [result] = await db.promise().query(
+    const [result] = await db.query(
       'SELECT week_start FROM schedule_generations WHERE id = ?',
       [generationId]
     );
@@ -429,7 +429,7 @@ class ScheduleGenerationService {
    * @returns {Promise<Object>} Schedule summary
    */
   async getScheduleSummary(weekStart) {
-    const [result] = await db.promise().query(
+    const [result] = await db.query(
       'SELECT * FROM schedule_summary WHERE week_start = ?',
       [weekStart]
     );

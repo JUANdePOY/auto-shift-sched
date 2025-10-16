@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../shared/components/ui/button';
-import { Tooltip, TooltipProvider, TooltipTrigger } from '../../shared/components/ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '../../shared/components/ui/tooltip';
 import {
   LayoutDashboard,
   Calendar,
@@ -10,7 +10,8 @@ import {
   ChevronRight,
   Zap,
   Clock,
-  User
+  User,
+  LogOut
 } from 'lucide-react';
 import { useAuth } from '../../auth/contexts/AuthContext';
 
@@ -34,7 +35,7 @@ interface NavItem {
 
 export function Navigation({ currentView, onViewChange }: NavigationProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const getNavItems = (): NavItem[] => {
     if (user?.role === 'admin') {
@@ -169,7 +170,7 @@ export function Navigation({ currentView, onViewChange }: NavigationProps) {
             "transition-all duration-300 ease-in-out overflow-hidden",
             isExpanded ? "opacity-100" : "opacity-0"
           )}>
-            <div className="p-3 bg-sidebar-accent/50 rounded-lg">
+            <div className="p-3 bg-sidebar-accent/50 rounded-lg mb-2">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span className="text-xs text-sidebar-foreground">System Online</span>
@@ -178,8 +179,26 @@ export function Navigation({ currentView, onViewChange }: NavigationProps) {
                 AI scheduling engine active
               </p>
             </div>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start h-10 px-3 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  onClick={() => logout()}
+                >
+                  <LogOut className="w-4 h-4 flex-shrink-0" />
+                  <span className="ml-3 transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap">
+                    Logout
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                Logout
+              </TooltipContent>
+            </Tooltip>
           </div>
-          
+
           {!isExpanded && (
             <div className="flex justify-center">
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>

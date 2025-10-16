@@ -2,6 +2,8 @@ export interface AvailabilityDay {
   available: boolean;
   preferredStart?: string;
   preferredEnd?: string;
+  startTime?: string;
+  endTime?: string;
   timeBlocks?: TimeBlock[];
 }
 

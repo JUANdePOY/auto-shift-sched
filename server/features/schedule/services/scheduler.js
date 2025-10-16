@@ -101,7 +101,7 @@ class ShiftScheduler {
    * Get all employees from database with their submitted availability for the week
    */
   async getEmployees(startDate) {
-    const [results] = await db.promise().query('SELECT * FROM employees');
+    const [results] = await db.query('SELECT * FROM employees');
     const employees = results.map(employee => formatEmployee(employee));
 
     // Calculate week start for availability lookup (Monday of the week containing startDate)
@@ -143,7 +143,7 @@ class ShiftScheduler {
    */
   async getShiftTemplates() {
     const query = 'SELECT * FROM shifts';
-    const [results] = await db.promise().query(query);
+    const [results] = await db.query(query);
     return results.map(shift => formatShift(shift));
   }
 

@@ -7,7 +7,7 @@ const router = express.Router();
 // GET all shifts
 router.get('/', async (req, res, next) => {
   try {
-    const [results] = await db.promise().query('SELECT * FROM shifts');
+    const [results] = await db.query('SELECT * FROM shifts');
     
     const shifts = results.map(shift => formatShift(shift));
     res.json(shifts);
@@ -26,7 +26,7 @@ router.get('/range', async (req, res, next) => {
   
   try {
     const query = 'SELECT * FROM shifts WHERE date BETWEEN ? AND ?';
-    const [results] = await db.promise().query(query, [startDate, endDate]);
+    const [results] = await db.query(query, [startDate, endDate]);
     
     const shifts = results.map(shift => formatShift(shift));
     res.json(shifts);
@@ -57,10 +57,10 @@ router.post('/', async (req, res, next) => {
   ];
   
   try {
-    const [result] = await db.promise().query(query, values);
+    const [result] = await db.query(query, values);
     
     // Return the newly created shift
-    const [newShift] = await db.promise().query('SELECT * FROM shifts WHERE id = ?', [result.insertId]);
+    const [newShift] = await db.query('SELECT * FROM shifts WHERE id = ?', [result.insertId]);
     const formattedShift = formatShift(newShift[0]);
     
     res.status(201).json(formattedShift);
@@ -94,14 +94,14 @@ router.put('/:id', async (req, res, next) => {
   ];
   
   try {
-    const [result] = await db.promise().query(query, values);
+    const [result] = await db.query(query, values);
     
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Shift not found' });
     }
     
     // Return the updated shift
-    const [updatedShift] = await db.promise().query('SELECT * FROM shifts WHERE id = ?', [id]);
+    const [updatedShift] = await db.query('SELECT * FROM shifts WHERE id = ?', [id]);
     const formattedShift = formatShift(updatedShift[0]);
     
     res.json(formattedShift);
@@ -217,7 +217,7 @@ router.delete('/:id', async (req, res, next) => {
   const { id } = req.params;
 
   try {
-    const [result] = await db.promise().query('DELETE FROM shifts WHERE id = ?', [id]);
+    const [result] = await db.query('DELETE FROM shifts WHERE id = ?', [id]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Shift not found' });

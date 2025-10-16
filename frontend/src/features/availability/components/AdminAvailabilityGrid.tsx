@@ -75,17 +75,31 @@ export const AdminAvailabilityGrid: React.FC = () => {
     }
   };
 
-  const getDayStatus = (dayAvailability: { available?: boolean; preferredStart?: string; preferredEnd?: string } | null | undefined) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getDayStatus = (dayAvailability: any) => {
     if (!dayAvailability || !dayAvailability.available) {
       return { text: '❌', variant: 'destructive' as const, tooltip: 'Unavailable' };
     }
-    
-    const start = dayAvailability.preferredStart || 'Any';
-    const end = dayAvailability.preferredEnd || 'Any';
-    return { 
-      text: '✅', 
-      variant: 'default' as const, 
-      tooltip: `${start} - ${end}` 
+
+    // Check if it's a rest request day
+    if (dayAvailability.requestRestDay) {
+      return { text: '☕', variant: 'secondary' as const, tooltip: 'Rest Request Day' };
+    }
+
+    // Display exact start and end times - support both new and old formats
+    let start = dayAvailability.startTime || dayAvailability.preferredStart || 'Not set';
+    let end = dayAvailability.endTime || dayAvailability.preferredEnd || 'Not set';
+
+    // Handle legacy "any" values from old data format
+    if (start === 'any' && end === 'any') {
+      start = '00:00';
+      end = '23:59';
+    }
+
+    return {
+      text: `✅ ${start} - ${end}`,
+      variant: 'default' as const,
+      tooltip: `${start} - ${end}`
     };
   };
 
@@ -98,7 +112,7 @@ export const AdminAvailabilityGrid: React.FC = () => {
       {/* Header and Controls */}
       <Card>
         <CardHeader>
-          <CardTitle>Availability Managemen</CardTitle>
+          <CardTitle>Availability Management</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
@@ -165,7 +179,7 @@ export const AdminAvailabilityGrid: React.FC = () => {
                 </thead>
                 <tbody>
                   {submissions.map((submission) => (
-                    <tr key={submission.id} className="border-b hover:bg-muted/50">
+                    <tr key={submission.employeeId} className="border-b hover:bg-muted/50">
                       <td className="p-3 font-medium">{submission.employeeName}</td>
                       <td className="p-3 text-sm text-muted-foreground">{submission.department}</td>
                       <td className="p-3 text-sm text-muted-foreground">
