@@ -1,13 +1,23 @@
 import type { Department, Station } from '../../shared/types';
 
-const API_URL = `http://${window.location.hostname}:3001/api/departments`;
+const API_URL = '/api/departments';
+
+const getAuthHeaders = (): HeadersInit => {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+};
 
 /**
  * Fetches all departments from the API.
  * @returns A promise that resolves to an array of departments.
  */
 export async function getAllDepartments(): Promise<Department[]> {
-  const response = await fetch(API_URL);
+  const response = await fetch(API_URL, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error('Failed to fetch departments');
   }
@@ -22,9 +32,7 @@ export async function getAllDepartments(): Promise<Department[]> {
 export async function createDepartment(departmentData: Omit<Department, 'id'>): Promise<Department> {
   const response = await fetch(API_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(departmentData),
   });
   if (!response.ok) {
@@ -42,9 +50,7 @@ export async function createDepartment(departmentData: Omit<Department, 'id'>): 
 export async function updateDepartment(id: string, departmentData: Partial<Omit<Department, 'id'>>): Promise<Department> {
   const response = await fetch(`${API_URL}/${id}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(departmentData),
   });
   if (!response.ok) {
@@ -61,6 +67,7 @@ export async function updateDepartment(id: string, departmentData: Partial<Omit<
 export async function deleteDepartment(id: string): Promise<{ message: string }> {
   const response = await fetch(`${API_URL}/${id}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   });
   if (!response.ok) {
     throw new Error(`Failed to delete department with id ${id}`);
@@ -74,7 +81,9 @@ export async function deleteDepartment(id: string): Promise<{ message: string }>
  * @returns A promise that resolves to an array of stations.
  */
 export async function getStationsByDepartment(departmentId: string): Promise<Station[]> {
-  const response = await fetch(`${API_URL}/${departmentId}/stations`);
+  const response = await fetch(`${API_URL}/${departmentId}/stations`, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch stations for department with id ${departmentId}`);
   }

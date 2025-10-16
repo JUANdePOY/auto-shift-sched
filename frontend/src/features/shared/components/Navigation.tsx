@@ -2,19 +2,22 @@ import React, { useState } from 'react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../shared/components/ui/button';
 import { Tooltip, TooltipProvider, TooltipTrigger } from '../../shared/components/ui/tooltip';
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  Brain, 
-  Users, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Calendar,
+  Users,
+  Settings,
   ChevronRight,
   Zap,
-  Clock
+  Clock,
+  User
 } from 'lucide-react';
+import { useAuth } from '../../auth/contexts/AuthContext';
 
 
-type View = 'dashboard' | 'suggestions' | 'schedule' | 'employees' | 'availability' | 'settings';
+type AdminView = 'dashboard' | 'schedule' | 'employees' | 'availability' | 'settings';
+type CrewView = 'dashboard' | 'availability' | 'profile';
+type View = AdminView | CrewView;
 
 interface NavigationProps {
   currentView: View;
@@ -29,42 +32,62 @@ interface NavItem {
   badge?: number;
 }
 
-export function Navigation({ currentView, onViewChange, suggestionsCount = 0 }: NavigationProps) {
+export function Navigation({ currentView, onViewChange }: NavigationProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const { user } = useAuth();
 
-  const navItems: NavItem[] = [
-    {
-      id: 'dashboard',
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-    },
-    {
-      id: 'schedule',
-      label: 'Schedule',
-      icon: Calendar,
-    },
-    {
-      id: 'suggestions',
-      label: 'AI Suggestions',
-      icon: Brain,
-      badge: suggestionsCount,
-    },
-    {
-      id: 'employees',
-      label: 'Employees',
-      icon: Users,
-    },
-    {
-      id: 'availability',
-      label: 'Availability',
-      icon: Clock,
-    },
-    {
-      id: 'settings',
-      label: 'Settings',
-      icon: Settings,
-    },
-  ];
+  const getNavItems = (): NavItem[] => {
+    if (user?.role === 'admin') {
+      return [
+        {
+          id: 'dashboard',
+          label: 'Dashboard',
+          icon: LayoutDashboard,
+        },
+        {
+          id: 'schedule',
+          label: 'Schedule',
+          icon: Calendar,
+        },
+        {
+          id: 'employees',
+          label: 'Employees',
+          icon: Users,
+        },
+        {
+          id: 'availability',
+          label: 'Availability',
+          icon: Clock,
+        },
+        {
+          id: 'settings',
+          label: 'Settings',
+          icon: Settings,
+        },
+      ];
+    } else if (user?.role === 'crew') {
+      return [
+        {
+          id: 'dashboard',
+          label: 'My Dashboard',
+          icon: LayoutDashboard,
+        },
+        {
+          id: 'availability',
+          label: 'Submit Availability',
+          icon: Clock,
+        },
+        {
+          id: 'profile',
+          label: 'My Profile',
+          icon: User,
+        },
+      ];
+    }
+    return [];
+  };
+
+  const navItems = getNavItems();
 
   return (
     <TooltipProvider delayDuration={0}>

@@ -32,7 +32,7 @@ router.get('/week', async (req, res, next) => {
       WHERE sa.assignment_date BETWEEN ? AND ?
       ORDER BY sa.assignment_date, s.startTime
     `;
-    const [results] = await db.promise().query(query, [startDate, endDate]);
+    const [results] = await db.query(query, [startDate, endDate]);
 
     const shifts = results.map(row => ({
       id: row.shift_id,
@@ -83,7 +83,7 @@ router.get('/conflicts', async (req, res, next) => {
   }
 
   try {
-    const [results] = await db.promise().query(query, params);
+    const [results] = await db.query(query, params);
     const assignments = results.map(row => ({
       id: row.id,
       shiftId: row.shift_id,
@@ -292,7 +292,7 @@ router.get('/final/:date', async (req, res, next) => {
 
   try {
     // Fetch final schedule assignments directly filtered by date_schedule
-    const [finalRows] = await db.promise().query(
+    const [finalRows] = await db.query(
       `SELECT fs.shift_id, fs.employee_id, s.title as shift_title, fs.date_schedule as date, s.startTime, s.endTime, e.name as employee_name, fs.required_stations
        FROM final_schedule fs
        JOIN shifts s ON fs.shift_id = s.id
@@ -331,7 +331,7 @@ router.get('/final/week/:startDate', async (req, res, next) => {
       JOIN employees e ON fs.employee_id = e.id
       WHERE LEFT(fs.date_schedule, 10) BETWEEN ? AND ?
     `;
-    const [results] = await db.promise().query(query, [startDate, endDate]);
+    const [results] = await db.query(query, [startDate, endDate]);
 
     res.json(results);
   } catch (error) {

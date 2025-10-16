@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { getWeeklySchedule, saveFinalSchedule, getFinalSchedule, getFinalScheduleForWeek } from '../services/scheduleService';
 import type { WeeklySchedule } from '../../shared/types';
@@ -19,10 +19,32 @@ export function useSchedule() {
   const [error, setError] = useState<string | null>(null);
 
   // Flag to prevent infinite loops
-  const isInitializedRef = useRef(false);
   const isManualRefreshRef = useRef(false);
+  const lastFetchedWeekRef = useRef<string | null>(null);
+  const lastFetchedFinalWeekRef = useRef<string | null>(null);
 
-  const fetchSchedule = useCallback(async (weekStart: string = '2025-01-20') => {
+  const getCurrentWeekStart = () => {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Adjust for Sunday
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + diff);
+
+    // Format as YYYY-MM-DD
+    const year = monday.getFullYear();
+    const month = String(monday.getMonth() + 1).padStart(2, '0');
+    const day = String(monday.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+  };
+
+  const fetchSchedule = useCallback(async (weekStart: string = getCurrentWeekStart()) => {
+    if (lastFetchedWeekRef.current === weekStart) {
+      console.log('Already fetched for this week, skipping');
+      return;
+    }
+    lastFetchedWeekRef.current = weekStart;
+
     try {
       setLoading(true);
       setError(null);
@@ -30,10 +52,6 @@ export function useSchedule() {
 
       const fetchedSchedule = await getWeeklySchedule(weekStart);
       setSchedule(fetchedSchedule);
-
-      // Also fetch final schedule for the week
-      const finalScheduleData = await getFinalScheduleForWeek(weekStart);
-      setFinalSchedule(finalScheduleData);
 
       console.log('✅ Schedule fetched successfully');
     } catch (err) {
@@ -111,6 +129,12 @@ export function useSchedule() {
   }, []);
 
   const fetchFinalScheduleForWeek = useCallback(async (weekStart: string) => {
+    if (lastFetchedFinalWeekRef.current === weekStart) {
+      console.log('Already fetched final schedule for this week, skipping');
+      return;
+    }
+    lastFetchedFinalWeekRef.current = weekStart;
+
     try {
       const finalScheduleData = await getFinalScheduleForWeek(weekStart);
 
@@ -146,14 +170,7 @@ export function useSchedule() {
     return schedule?.shifts.find(shift => shift.id === shiftId);
   }, [schedule]);
 
-  // Only run once on mount - prevent infinite refresh
-  useEffect(() => {
-    if (!isInitializedRef.current) {
-      console.log('🚀 Initializing schedule hook');
-      isInitializedRef.current = true;
-      fetchSchedule();
-    }
-  }, []); // Empty dependency array - only run once on mount
+
 
   return {
     schedule,

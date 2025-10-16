@@ -14,8 +14,6 @@ import {
 } from '../../shared/components/ui/alert-dialog';
 import { useEmployees } from '../hooks/useEmployees';
 import { getAllDepartments } from '../services/departmentService';
-import { EmployeeStats } from './EmployeeStats';
-import { EmployeeFilters } from './EmployeeFilters';
 import { EmployeeList } from './EmployeeList';
 import type { Employee, Department, Station } from '../../shared/types';
 
@@ -183,30 +181,51 @@ export function Employees() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="flex items-center gap-2">
-            <Users className="w-6 h-6 text-blue-600" />
-            Employee Management
-          </h1>
-          <p className="text-muted-foreground">
-            Manage your workforce and track performance
-          </p>
+    <div className="space-y-8">
+      {/* Enhanced Header with Inline Stats */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+        <div className="flex items-center justify-between gap-8">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Users className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Employee Management</h1>
+              <p className="text-gray-600">Manage your workforce and track performance metrics</p>
+            </div>
+          </div>
+
+          {/* Inline Stats - Right Side */}
+          <div className="flex items-center gap-6 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              <span className="font-medium text-gray-700">{employees.length}</span>
+              <span className="text-gray-500">Total Employee</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="font-medium text-gray-700">{employees.filter(emp => emp.currentWeeklyHours > 0).length}</span>
+              <span className="text-gray-500">Active</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+              <span className="font-medium text-gray-700">{Math.round(employees.length > 0 ? employees.reduce((sum, emp) => sum + emp.currentWeeklyHours, 0) / employees.length : 0)}h</span>
+              <span className="text-gray-500">Avg Hours</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+              <span className="font-medium text-gray-700">{Math.round(employees.length > 0 ? employees.reduce((sum, emp) => sum + (emp.currentWeeklyHours / emp.maxHoursPerWeek), 0) / employees.length * 100 : 0)}%</span>
+              <span className="text-gray-500">Utilization</span>
+            </div>
+          </div>
         </div>
-        
-        <Button onClick={handleAddEmployee}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Employee
-        </Button>
       </div>
 
-      {/* Summary Stats */}
-      <EmployeeStats employees={employees} />
-
-      {/* Filters and Employee List */}
-      <EmployeeFilters
+      <EmployeeList
+        filteredEmployees={filteredEmployees}
+        onEditEmployee={handleEditEmployee}
+        onDeleteEmployee={handleDeleteEmployee}
+        onAddEmployee={handleAddEmployee}
         searchTerm={searchTerm}
         filterDepartment={filterDepartment}
         filterStation={filterStation}
@@ -217,12 +236,6 @@ export function Employees() {
         onDepartmentChange={setFilterDepartment}
         onStationChange={setFilterStation}
         onSortChange={setSortBy}
-      />
-
-      <EmployeeList
-        filteredEmployees={filteredEmployees}
-        onEditEmployee={handleEditEmployee}
-        onDeleteEmployee={handleDeleteEmployee}
       />
 
       {/* Employee Modal */}
@@ -256,6 +269,16 @@ export function Employees() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Floating Action Button */}
+      <Button
+        onClick={handleAddEmployee}
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl transition-all duration-200 z-10"
+        size="icon"
+      >
+        <Plus className="w-6 h-6" />
+        <span className="sr-only">Add Employe</span>
+      </Button>
     </div>
   );
 }

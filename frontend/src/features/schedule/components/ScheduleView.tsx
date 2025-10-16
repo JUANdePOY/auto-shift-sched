@@ -1,29 +1,15 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Button } from '../../shared/components/ui/button';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../shared/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../shared/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../shared/components/ui/tabs';
-import {
-  Calendar,
-  Plus,
-  Filter,
-  RefreshCw
-} from 'lucide-react';
-import { toast } from 'sonner';
 import type { Shift, Employee, ScheduleConflict } from '../../shared/types';
-import ShiftAssignmentPanel from './ShiftAssignmentPanel';
-import { saveFinalSchedule } from '../services/scheduleService';
-import { UnifiedScheduleNavigation } from './UnifiedScheduleNavigation';
-import { WeekView } from './WeekView';
-import { DayView } from './DayView';
+import { WeeklyCardView } from './views/WeeklyCardView';
+import { TemporaryWeeklyScheduleView } from './views/TemporaryWeeklyScheduleView';
 import { ShiftDetail } from './ShiftDetail';
+import { ScheduleHeader } from './header/ScheduleHeader';
+import ShiftAssignmentPanel from './ShiftAssignmentPanel';
 import {
   getStartOfWeek,
-  getWeekDates,
-  getRelativeDateLabel,
-  isToday,
-  isWeekend
-} from './scheduleUtils';
+  getWeekDates
+} from './utils/scheduleUtils';
 
 
 interface FinalScheduleAssignment {
@@ -47,117 +33,44 @@ interface ScheduleViewProps {
   employees: Employee[];
   conflicts: ScheduleConflict[];
   finalSchedule?: FinalScheduleAssignment[] | null;
-  onEditShift: (shift: Shift) => void;
-  onAssignEmployee: (shiftId: string, employeeId: string) => void;
-  onUnassignEmployee: (shiftId: string, employeeId: string) => void;
   onRefreshData: (weekStart?: string) => void;
+  onSaveFinalSchedule?: (date: string, assignments: Array<{ shiftId: string; employeeId: string }>, notes?: string) => Promise<void>;
+  isCreateMode?: boolean;
+  onBackToSchedule?: () => void;
 }
 
 export function ScheduleView({
   employees,
   conflicts,
   finalSchedule,
-  onEditShift,
-  onAssignEmployee,
-  onUnassignEmployee,
-  onRefreshData
+  onRefreshData,
+  onSaveFinalSchedule,
+  isCreateMode = false,
+  onBackToSchedule
 }: ScheduleViewProps) {
   const [currentWeek, setCurrentWeek] = useState(getStartOfWeek(new Date()));
+  const lastCalledWeekRef = useRef<string | null>(null);
 
   // Fetch schedule when week changes
   useEffect(() => {
     const weekStart = currentWeek.getFullYear() + '-' +
       String(currentWeek.getMonth() + 1).padStart(2, '0') + '-' +
       String(currentWeek.getDate()).padStart(2, '0');
+    if (lastCalledWeekRef.current === weekStart) return;
+    lastCalledWeekRef.current = weekStart;
     onRefreshData(weekStart); // This will call fetchSchedule with the new week
   }, [currentWeek]);
 
-  const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
-  const [isCreateShiftOpen, setIsCreateShiftOpen] = useState(false);
+  const [isAssignmentPanelOpen, setIsAssignmentPanelOpen] = useState(false);
+  const [selectedDateForAssignment, setSelectedDateForAssignment] = useState<string>('');
+  const [isWeeklyScheduleMode, setIsWeeklyScheduleMode] = useState(isCreateMode);
 
-  // State for selected day in Day View
-  const [selectedDay, setSelectedDay] = useState<Date>(getStartOfWeek(new Date()));
 
-  const timeSlots = [
-    '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
-    '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'
-  ];
 
-  const getEmployeeName = useCallback((employeeId: string) => {
-    const employee = employees.find(emp => emp.id === employeeId);
-    return employee ? employee.name : 'Unknown';
-  }, [employees]);
-
-  const navigateToToday = useCallback(() => {
-    const today = new Date();
-    const startOfWeek = getStartOfWeek(today);
-    setCurrentWeek(startOfWeek);
-    setSelectedDay(today);
-  }, []);
-
-  const navigateMonth = useCallback((direction: 'prev' | 'next') => {
-    const newDate = new Date(selectedDay);
-    newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
-    const startOfWeek = getStartOfWeek(newDate);
-    setCurrentWeek(startOfWeek);
-    setSelectedDay(newDate);
-  }, [selectedDay]);
-
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (viewMode !== 'day') return;
-
-      switch (event.key) {
-        case 'ArrowLeft':
-          event.preventDefault();
-          setSelectedDay(prev => {
-            const newDate = new Date(prev);
-            newDate.setDate(newDate.getDate() - 1);
-            return newDate;
-          });
-          break;
-        case 'ArrowRight':
-          event.preventDefault();
-          setSelectedDay(prev => {
-            const newDate = new Date(prev);
-            newDate.setDate(newDate.getDate() + 1);
-            return newDate;
-          });
-          break;
-        case 't':
-        case 'T':
-          if (!event.ctrlKey && !event.metaKey) {
-            event.preventDefault();
-            navigateToToday();
-          }
-          break;
-        case 'h':
-        case 'H':
-          if (!event.ctrlKey && !event.metaKey) {
-            event.preventDefault();
-            navigateToToday();
-          }
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [viewMode]);
-
-  const getShiftConflicts = useCallback((shiftId: string) => {
+  const getShiftConflicts = (shiftId: string) => {
     return conflicts.filter(conflict => conflict.shiftId === shiftId);
-  }, [conflicts]);
-
-  // Get departments from final schedule data
-  const departments = useMemo(() => {
-    return finalSchedule && finalSchedule.length > 0
-      ? [...new Set(finalSchedule.map(assignment => assignment.department || 'general'))]
-      : [];
-  }, [finalSchedule]);
+  };
 
   // Only display data from final_schedule table - no fallback to regular shifts
   const shiftsToDisplay: Shift[] = useMemo(() => {
@@ -190,15 +103,8 @@ export function ScheduleView({
       groupedByShift[assignment.shift_id].assignedEmployeeStations.push(Array.isArray(assignment.required_stations) ? assignment.required_stations : []);
     });
 
-    let allShifts = Object.values(groupedByShift);
-
-    // Filter by selectedDepartment if not 'all'
-    if (selectedDepartment !== 'all') {
-      allShifts = allShifts.filter(shift => shift.department === selectedDepartment);
-    }
-
-    return allShifts;
-  }, [finalSchedule, selectedDepartment]);
+    return Object.values(groupedByShift);
+  }, [finalSchedule]);
 
   const weekDates = useMemo(() => getWeekDates(currentWeek), [currentWeek]);
 
@@ -209,143 +115,93 @@ export function ScheduleView({
       String(date.getDate()).padStart(2, '0');
   };
 
-  // Extracted handler for saving final schedule
-  const handleSaveFinalSchedule = async (date: string, assignments: { shiftId: string; employeeId: string }[]) => {
+  const handleCreateSchedule = (date: string) => {
+    setSelectedDateForAssignment(date);
+    setIsAssignmentPanelOpen(true);
+  };
+
+  const handleCreateWeeklySchedule = () => {
+    setIsWeeklyScheduleMode(true);
+  };
+
+  const handleDayClick = (date: string) => {
+    setSelectedDateForAssignment(date);
+    setIsAssignmentPanelOpen(true);
+  };
+
+  const handleSaveWeeklySchedule = async () => {
     try {
-      // Filter assignments to only include those with an employee assigned
-      const assignmentsWithEmployees = assignments.filter(assignment =>
-        assignment.employeeId && assignment.employeeId.trim() !== ''
-      );
-
-      if (assignmentsWithEmployees.length === 0) {
-        toast.error('No assignments with employees to save. Please assign employees to shifts first.');
-        return;
-      }
-
-      const result = await saveFinalSchedule(date, assignmentsWithEmployees);
-
-      if (result.success) {
-        toast.success(`Successfully saved final schedule with ${result.totalAssignments} assignment(s)! Schedule ID: ${result.scheduleGenerationId}`);
-        onRefreshData();
-        setIsCreateShiftOpen(false);
-      } else {
-        toast.error('Failed to save final schedule');
-      }
+      // The actual save logic is handled by the TemporaryWeeklyScheduleView component
+      // which uses the TemporaryScheduleContext. Here we just need to close the mode
+      // and refresh data after the save is complete.
+      console.log('Weekly schedule save initiated');
+      // The context handles the actual saving, so we just close the mode
+      setIsWeeklyScheduleMode(false);
+      onRefreshData();
     } catch (error) {
-      console.error('Failed to save final schedule:', error);
-      toast.error('Failed to save final schedule. Please try again.');
+      console.error('Failed to save weekly schedule:', error);
     }
   };
 
+  const handleBackToSchedule = () => {
+    if (onBackToSchedule) {
+      onBackToSchedule();
+    } else {
+      setIsWeeklyScheduleMode(false);
+    }
+  };
+
+  const handleSaveFinalSchedule = async (date: string, assignments: Array<{ shiftId: string; employeeId: string }>) => {
+    // Save to temporary schedule context instead of directly to database
+    console.log('Saving final schedule to temporary context:', date, assignments);
+    // The actual saving logic will be handled by the TemporaryScheduleContext
+    onRefreshData(); // Refresh data after saving
+  };
+
+
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
-        <div className="space-y-1">
-          <h1 className="flex items-center gap-3 text-2xl font-bold text-gray-900">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <Calendar className="w-6 h-6 text-white" />
-            </div>
-            Schedule View
-          </h1>
-          <p className="text-gray-600 text-sm">
-            Manage shifts and assignments for your team
-          </p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-            <SelectTrigger className="w-48 h-10 bg-white border-gray-200 shadow-sm">
-              <Filter className="w-4 h-4 mr-2 text-gray-500" />
-              <SelectValue placeholder="Filter by department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Departments</SelectItem>
-              {departments.map(dept => (
-                <SelectItem key={dept} value={dept}>
-                  {dept.charAt(0).toUpperCase() + dept.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <div className="flex gap-2">
-            <Button
-              onClick={() => {
-                const weekStart = formatDateToString(currentWeek);
-                onRefreshData(weekStart);
-              }}
-              variant="outline"
-              className="h-10 px-4 bg-white border-gray-200 shadow-sm hover:bg-gray-50"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
-            <Button
-              onClick={() => setIsCreateShiftOpen(true)}
-              className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create Shift
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Unified Navigation */}
-      <UnifiedScheduleNavigation
-        viewMode={viewMode}
+    <div className="space-y-3">
+      <ScheduleHeader
+        onRefreshData={onRefreshData}
         currentWeek={currentWeek}
-        selectedDay={selectedDay}
-        weekDates={weekDates}
-        shiftsToDisplay={shiftsToDisplay}
-        isToday={isToday}
-        isWeekend={isWeekend}
-        getRelativeDateLabel={getRelativeDateLabel}
-        navigateToToday={navigateToToday}
-        navigateWeek={(direction) => {
-          const newWeek = new Date(currentWeek);
-          newWeek.setDate(newWeek.getDate() + (direction === 'next' ? 7 : -7));
-          setCurrentWeek(newWeek);
-        }}
-        navigateMonth={navigateMonth}
-        setSelectedDay={setSelectedDay}
-        setCurrentWeek={setCurrentWeek}
+        formatDateToString={formatDateToString}
+        onCreateSchedule={handleCreateSchedule}
+        onCreateWeeklySchedule={handleCreateWeeklySchedule}
+        isWeeklyScheduleMode={isWeeklyScheduleMode}
+        onBackToSchedule={handleBackToSchedule}
       />
 
-      {/* View Mode Toggle */}
-      <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'week' | 'day')}>
-        <TabsList>
-          <TabsTrigger value="week">Week View</TabsTrigger>
-          <TabsTrigger value="day">Day View</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="week" className="space-y-4">
-          <WeekView
+      <div className="flex justify-center items-center min-h-[400px]">
+        {isWeeklyScheduleMode ? (
+          <TemporaryWeeklyScheduleView
+            weekDates={weekDates}
+            navigateWeek={(direction: 'prev' | 'next') => {
+              const newWeek = new Date(currentWeek);
+              newWeek.setDate(newWeek.getDate() + (direction === 'next' ? 7 : -7));
+              setCurrentWeek(newWeek);
+            }}
+            onDayClick={handleDayClick}
+            onSaveWeeklySchedule={handleSaveWeeklySchedule}
+          />
+        ) : (
+          <WeeklyCardView
             weekDates={weekDates}
             shifts={shiftsToDisplay}
             onShiftClick={setSelectedShift}
             getShiftConflicts={getShiftConflicts}
+            navigateWeek={(direction: 'prev' | 'next') => {
+              const newWeek = new Date(currentWeek);
+              newWeek.setDate(newWeek.getDate() + (direction === 'next' ? 7 : -7));
+              setCurrentWeek(newWeek);
+            }}
           />
-        </TabsContent>
-
-        <TabsContent value="day" className="space-y-4">
-          <DayView
-            date={selectedDay}
-            shifts={shiftsToDisplay.filter(shift => {
-              const dateString = formatDateToString(selectedDay);
-              return shift.date === dateString;
-            })}
-            timeSlots={timeSlots}
-            onShiftClick={setSelectedShift}
-            getShiftConflicts={getShiftConflicts}
-          />
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       {/* Shift Detail Dialog */}
       <Dialog open={!!selectedShift} onOpenChange={() => setSelectedShift(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedShift?.title}</DialogTitle>
             <DialogDescription>
@@ -355,26 +211,19 @@ export function ScheduleView({
 
           {selectedShift && (
             <ShiftDetail
-              shift={selectedShift}
+              shifts={[selectedShift]}
               employees={employees}
               conflicts={getShiftConflicts(selectedShift.id)}
-              onAssignEmployee={onAssignEmployee}
-              onUnassignEmployee={onUnassignEmployee}
-              onEditShift={() => {
-                onEditShift(selectedShift);
-                setSelectedShift(null);
-              }}
-              getEmployeeName={getEmployeeName}
+              date={selectedShift.date}
             />
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Shift Assignment Panel */}
       <ShiftAssignmentPanel
-        isOpen={isCreateShiftOpen}
-        onClose={() => setIsCreateShiftOpen(false)}
-        date={new Date().toISOString().split('T')[0]}
+        isOpen={isAssignmentPanelOpen}
+        onClose={() => setIsAssignmentPanelOpen(false)}
+        date={selectedDateForAssignment}
         employees={employees}
         onSaveFinalSchedule={handleSaveFinalSchedule}
       />

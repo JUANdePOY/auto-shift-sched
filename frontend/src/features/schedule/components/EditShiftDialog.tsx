@@ -119,7 +119,7 @@ const EditShiftDialog: React.FC<EditShiftDialogProps> = ({
         setEditForm(prev => ({ ...prev, endTime: defaultEndStr }));
       }
     }
-  }, [editForm.startTime]);
+  }, [editForm.endTime, editForm.startTime]);
 
   const handleSave = () => {
     if (!shift) return;

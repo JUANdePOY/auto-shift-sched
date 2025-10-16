@@ -1,13 +1,23 @@
 import type { Employee } from '../../shared/types';
 
-const API_URL = `http://${window.location.hostname}:3001/api/employees`;
+const API_URL = '/api/employees';
+
+const getAuthHeaders = (): HeadersInit => {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+};
 
 /**
  * Fetches all employees from the API.
  * @returns A promise that resolves to an array of employees.
  */
 export async function getAllEmployees(): Promise<Employee[]> {
-  const response = await fetch(API_URL);
+  const response = await fetch(API_URL, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error('Failed to fetch employees');
   }
@@ -20,7 +30,9 @@ export async function getAllEmployees(): Promise<Employee[]> {
  * @returns A promise that resolves to the employee object.
  */
 export async function getEmployeeById(id: string): Promise<Employee> {
-  const response = await fetch(`${API_URL}/${id}`);
+  const response = await fetch(`${API_URL}/${id}`, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch employee with id ${id}`);
   }
@@ -35,9 +47,7 @@ export async function getEmployeeById(id: string): Promise<Employee> {
 export async function createEmployee(employeeData: Omit<Employee, 'id'>): Promise<Employee> {
   const response = await fetch(API_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(employeeData),
   });
   if (!response.ok) {
@@ -55,9 +65,7 @@ export async function createEmployee(employeeData: Omit<Employee, 'id'>): Promis
 export async function updateEmployee(id: string, employeeData: Partial<Omit<Employee, 'id'>>): Promise<Employee> {
   const response = await fetch(`${API_URL}/${id}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(employeeData),
   });
   if (!response.ok) {
@@ -74,6 +82,7 @@ export async function updateEmployee(id: string, employeeData: Partial<Omit<Empl
 export async function deleteEmployee(id: string): Promise<{ message: string }> {
   const response = await fetch(`${API_URL}/${id}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   });
   if (!response.ok) {
     throw new Error(`Failed to delete employee with id ${id}`);

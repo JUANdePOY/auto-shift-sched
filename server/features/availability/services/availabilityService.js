@@ -31,36 +31,21 @@ class AvailabilityService {
       );
 
       if (results.length === 0) {
-        // Return default availability from employee profile
+        // Check if employee exists
         const [employeeResult] = await db.promise().query(
-          'SELECT availability FROM employees WHERE id = ?',
+          'SELECT id FROM employees WHERE id = ?',
           [employeeId]
         );
-        
+
         if (employeeResult.length === 0) {
           throw new Error('Employee not found');
         }
 
-        let availability;
-        try {
-          // Handle both JSON string and object formats
-          const availabilityData = employeeResult[0].availability;
-          if (typeof availabilityData === 'string') {
-            availability = JSON.parse(availabilityData || '{}');
-          } else if (typeof availabilityData === 'object' && availabilityData !== null) {
-            availability = availabilityData;
-          } else {
-            availability = {};
-          }
-        } catch (parseError) {
-          console.error(`Could not parse availability for employee ${employeeId}, using default:`, parseError.message);
-          availability = {};
-        }
-
+        // Return default empty availability since availability is now in submissions table
         return {
           employeeId: parseInt(employeeId),
           weekStart,
-          availability: { ...this.defaultAvailability, ...availability },
+          availability: { ...this.defaultAvailability },
           isLocked: false,
           submissionDate: null,
           status: 'not_submitted'

@@ -1,168 +1,253 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const db = require('../../../shared/config/database');
-const { formatEmployee, safeJsonParse } = require('../../../shared/utils/formatUtils');
-const { 
-  employeeValidationRules, 
-  handleValidationErrors,
-  validateEmployeeId 
-} = require('../validation/employeeValidation');
 
 const router = express.Router();
 
-// GET all employees
-router.get('/', async (req, res, next) => {
+// Get all employees
+router.get('/', async (req, res) => {
   try {
-    const [results] = await db.promise().query('SELECT * FROM employees');
-    
-    const employees = results.map(employee => formatEmployee(employee));
-    res.json(employees);
+    const [employees] = await db.execute(
+      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, created_at, updated_at FROM employees'
+    );
+
+    // Parse JSON fields
+    const formattedEmployees = employees.map(emp => {
+      let station = [];
+      if (emp.station) {
+        try {
+          station = JSON.parse(emp.station);
+        } catch (e) {
+          // If not valid JSON, treat as single station name
+          station = [emp.station];
+        }
+      }
+      return {
+        ...emp,
+        station
+      };
+    });
+
+    res.json(formattedEmployees);
   } catch (error) {
-    next(error);
+    console.error('Error fetching employees:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
-// GET single employee by ID
-router.get('/:id', validateEmployeeId, async (req, res, next) => {
+// Get employee by ID
+router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const [results] = await db.promise().query('SELECT * FROM employees WHERE id = ?', [id]);
-    
-    if (results.length === 0) {
-      return res.status(404).json({ 
-        error: 'Not Found', 
-        message: 'Employee not found' 
-      });
+    const [employees] = await db.execute(
+      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, created_at, updated_at FROM employees WHERE id = ?',
+      [id]
+    );
+
+    if (employees.length === 0) {
+      return res.status(404).json({ message: 'Employee not found' });
     }
-    
-    const employee = formatEmployee(results[0]);
+
+    const employee = employees[0];
+    let station = [];
+    if (employee.station) {
+      try {
+        station = JSON.parse(employee.station);
+      } catch (e) {
+        // If not valid JSON, treat as single station name
+        station = [employee.station];
+      }
+    }
+    employee.station = station;
+
     res.json(employee);
   } catch (error) {
     console.error('Error fetching employee:', error);
-    res.status(500).json({ 
-      error: 'Database Error', 
-      message: 'Failed to fetch employee' 
-    });
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
-// POST create new employee
-router.post('/', employeeValidationRules, handleValidationErrors, async (req, res, next) => {
+// Create new employee
+router.post('/', async (req, res) => {
   try {
-    const { name, email, department, station, availability, maxHoursPerWeek, currentWeeklyHours } = req.body;
-    
-    const query = `
-      INSERT INTO employees (name, email, department, station, availability, maxHoursPerWeek, currentWeeklyHours)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-    
-    const values = [
-      name,
-      email,
-      department,
-      JSON.stringify(station),
-      JSON.stringify(availability),
-      maxHoursPerWeek || 0,
-      currentWeeklyHours || 0
-    ];
-    
-    const [result] = await db.promise().query(query, values);
-    
-    // Return the newly created employee
-    const [newEmployee] = await db.promise().query('SELECT * FROM employees WHERE id = ?', [result.insertId]);
-    const formattedEmployee = formatEmployee(newEmployee[0]);
-    
-    res.status(201).json(formattedEmployee);
+    const { name, email, password, role = 'crew', department, station, position, maxHoursPerWeek = 40, currentWeeklyHours = 0 } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({ message: 'Name and email are required' });
+    }
+
+    // Check if email already exists
+    const [existing] = await db.execute('SELECT id FROM employees WHERE email = ?', [email]);
+    if (existing.length > 0) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+
+    // Set default password to employee's name if not provided
+    const defaultPassword = password || name;
+
+    // Hash password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(defaultPassword, saltRounds);
+
+    // Insert employee
+    const [result] = await db.execute(
+      `INSERT INTO employees (name, email, password, role, department, station, position, maxHoursPerWeek, currentWeeklyHours)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name,
+        email,
+        hashedPassword,
+        role,
+        department,
+        station ? JSON.stringify(station) : null,
+        position || null,
+        maxHoursPerWeek,
+        currentWeeklyHours
+      ]
+    );
+
+    // Return created employee (without password)
+    const [newEmployee] = await db.execute(
+      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, created_at, updated_at FROM employees WHERE id = ?',
+      [result.insertId]
+    );
+
+    const employee = newEmployee[0];
+    let parsedStation = [];
+    if (employee.station) {
+      try {
+        parsedStation = JSON.parse(employee.station);
+      } catch (e) {
+        // If not valid JSON, treat as single station name
+        parsedStation = [employee.station];
+      }
+    }
+    employee.station = parsedStation;
+
+    res.status(201).json(employee);
   } catch (error) {
     console.error('Error creating employee:', error);
-    
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ 
-        error: 'Conflict', 
-        message: 'Employee with this email already exists' 
-      });
-    }
-    
-    res.status(500).json({ 
-      error: 'Database Error', 
-      message: 'Failed to create employee' 
-    });
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
-// PUT update employee
-router.put('/:id', validateEmployeeId, employeeValidationRules, handleValidationErrors, async (req, res, next) => {
+// Update employee
+router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, department, station, availability, maxHoursPerWeek, currentWeeklyHours } = req.body;
-    
-    const query = `
-      UPDATE employees 
-      SET name = ?, email = ?, department = ?, station = ?, availability = ?, maxHoursPerWeek = ?, currentWeeklyHours = ?
-      WHERE id = ?
-    `;
-    
-    const values = [
-      name,
-      email,
-      department,
-      JSON.stringify(station),
-      JSON.stringify(availability),
-      maxHoursPerWeek,
-      currentWeeklyHours,
-      id
-    ];
-    
-    const [result] = await db.promise().query(query, values);
-    
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ 
-        error: 'Not Found', 
-        message: 'Employee not found' 
-      });
+    const { name, email, password, role, department, station, position, maxHoursPerWeek, currentWeeklyHours } = req.body;
+
+    // Check if employee exists
+    const [existing] = await db.execute('SELECT id FROM employees WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ message: 'Employee not found' });
     }
-    
-    // Return the updated employee
-    const [updatedEmployee] = await db.promise().query('SELECT * FROM employees WHERE id = ?', [id]);
-    const formattedEmployee = formatEmployee(updatedEmployee[0]);
-    
-    res.json(formattedEmployee);
+
+    // Check if email is taken by another employee
+    if (email) {
+      const [emailCheck] = await db.execute('SELECT id FROM employees WHERE email = ? AND id != ?', [email, id]);
+      if (emailCheck.length > 0) {
+        return res.status(400).json({ message: 'Email already exists' });
+      }
+    }
+
+    // Build update query dynamically
+    const updates = [];
+    const values = [];
+
+    if (name !== undefined) {
+      updates.push('name = ?');
+      values.push(name);
+    }
+    if (email !== undefined) {
+      updates.push('email = ?');
+      values.push(email);
+    }
+    if (password) {
+      // Hash new password
+      const saltRounds = 10;
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
+      updates.push('password = ?');
+      values.push(hashedPassword);
+    }
+    if (role !== undefined) {
+      updates.push('role = ?');
+      values.push(role);
+    }
+    if (department !== undefined) {
+      updates.push('department = ?');
+      values.push(department);
+    }
+    if (station !== undefined) {
+      updates.push('station = ?');
+      values.push(station ? JSON.stringify(station) : null);
+    }
+    if (position !== undefined) {
+      updates.push('position = ?');
+      values.push(position);
+    }
+    if (maxHoursPerWeek !== undefined) {
+      updates.push('maxHoursPerWeek = ?');
+      values.push(maxHoursPerWeek);
+    }
+    if (currentWeeklyHours !== undefined) {
+      updates.push('currentWeeklyHours = ?');
+      values.push(currentWeeklyHours);
+    }
+
+
+    if (updates.length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
+    }
+
+    // Execute update
+    const query = `UPDATE employees SET ${updates.join(', ')} WHERE id = ?`;
+    values.push(id);
+    await db.execute(query, values);
+
+    // Return updated employee
+    const [updatedEmployee] = await db.execute(
+      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, created_at, updated_at FROM employees WHERE id = ?',
+      [id]
+    );
+
+    const employee = updatedEmployee[0];
+    let parsedStation = [];
+    if (employee.station) {
+      try {
+        parsedStation = JSON.parse(employee.station);
+      } catch (e) {
+        // If not valid JSON, treat as single station name
+        parsedStation = [employee.station];
+      }
+    }
+    employee.station = parsedStation;
+
+    res.json(employee);
   } catch (error) {
     console.error('Error updating employee:', error);
-    
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ 
-        error: 'Conflict', 
-        message: 'Employee with this email already exists' 
-      });
-    }
-    
-    res.status(500).json({ 
-      error: 'Database Error', 
-      message: 'Failed to update employee' 
-    });
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
-// DELETE employee
-router.delete('/:id', validateEmployeeId, async (req, res, next) => {
+// Delete employee
+router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const [result] = await db.promise().query('DELETE FROM employees WHERE id = ?', [id]);
-    
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ 
-        error: 'Not Found', 
-        message: 'Employee not found' 
-      });
+
+    // Check if employee exists
+    const [existing] = await db.execute('SELECT id FROM employees WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ message: 'Employee not found' });
     }
-    
+
+    // Delete employee
+    await db.execute('DELETE FROM employees WHERE id = ?', [id]);
+
     res.json({ message: 'Employee deleted successfully' });
   } catch (error) {
     console.error('Error deleting employee:', error);
-    res.status(500).json({ 
-      error: 'Database Error', 
-      message: 'Failed to delete employee' 
-    });
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Navigation } from './features/shared/components/Navigation';
 import { Dashboard } from './features/shared/components/Dashboard';
-import { AISuggestionsPanel } from './features/ai-suggestions/components/AISuggestionPanel';
+
 import { ScheduleView } from './features/schedule/components/ScheduleView';
 import { Employees } from './features/employees/components/Employees';
 import AvailabilityPanel from './features/availability/components/AvailabilityPanel';
@@ -9,55 +9,32 @@ import { Toaster } from './features/shared/components/ui/sonner';
 import { toast } from 'sonner';
 import { useEmployees } from './features/employees/hooks/useEmployees';
 import { useSchedule } from './features/schedule/hooks/useSchedule';
-import { useAssignments } from './features/shared/hooks/useAssignments';
-import { useSuggestions } from './features/ai-suggestions/hooks/useSuggestions';
-import type { AISuggestion } from './features/shared/types';
+import { useAuth } from './features/auth/contexts/AuthContext';
+import { LoginForm } from './features/auth/components/LoginForm';
+import { CrewDashboard } from './features/crew/components/CrewDashboard';
+import { CrewAvailabilityPanel } from './features/crew/components/CrewAvailabilityPanel';
+import { CrewProfileWrapper } from './features/crew/components/CrewProfileWrapper';
 
-type View = 'dashboard' | 'suggestions' | 'schedule' | 'employees' | 'availability' | 'settings';
+type AdminView = 'dashboard' | 'schedule' | 'employees' | 'availability' | 'settings';
+type CrewView = 'dashboard' | 'availability' | 'profile';
+type View = AdminView | CrewView;
 
 export default function App() {
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [currentView, setCurrentView] = useState<View>('dashboard');
 
   // Custom hooks for state management
-  const { employees, updateEmployeeHours } = useEmployees();
-  const { schedule, finalSchedule, updateShiftAssignment, fetchSchedule, fetchFinalScheduleForWeek } = useSchedule();
-  const { handleAssignEmployee, handleUnassignEmployee } = useAssignments();
-  const { handleApplySuggestion } = useSuggestions();
+  const { employees } = useEmployees();
+  const { schedule, finalSchedule, fetchSchedule, fetchFinalScheduleForWeek } = useSchedule();
 
-  const handleApplySuggestionWrapper = (suggestion: AISuggestion) => {
-    handleApplySuggestion(
-      suggestion,
-      schedule,
-      updateShiftAssignment,
-      updateEmployeeHours
-    );
-  };
-
-  const handleAssignEmployeeWrapper = (shiftId: string, employeeId: string) => {
-    handleAssignEmployee(
-      shiftId,
-      employeeId,
-      employees,
-      updateShiftAssignment,
-      updateEmployeeHours
-    );
-  };
-
-  const handleUnassignEmployeeWrapper = (shiftId: string, employeeId: string) => {
-    handleUnassignEmployee(
-      shiftId,
-      employeeId,
-      employees,
-      updateShiftAssignment,
-      updateEmployeeHours
-    );
-  };
-
-  const handleEditShift = () => {
-    toast.info('Shift editing feature coming soon!', {
-      description: 'This would open a shift editing dialog.'
-    });
-  };
+  // Fetch initial schedule data on app mount (only if authenticated)
+  useEffect(() => {
+    if (isAuthenticated) {
+      const weekStart = getCurrentWeekStart();
+      fetchSchedule(weekStart);
+      fetchFinalScheduleForWeek(weekStart);
+    }
+  }, [isAuthenticated]);
 
 
 
@@ -84,69 +61,80 @@ export default function App() {
       return;
     }
     setCurrentView(view);
-
-    // Fetch final schedule when switching to schedule view
-    if (view === 'schedule') {
-      const currentWeekStart = getCurrentWeekStart();
-      fetchFinalScheduleForWeek(currentWeekStart);
-    }
   };
 
   const renderCurrentView = () => {
-    switch (currentView) {
-      case 'suggestions':
-        return (
-          <AISuggestionsPanel
-            suggestions={schedule?.suggestions || []}
-            employees={employees}
-            onApplySuggestion={handleApplySuggestionWrapper}
-          />
-        );
-
-      case 'schedule':
-        return (
-          <ScheduleView
-            employees={employees}
-            conflicts={schedule?.conflicts || []}
-            finalSchedule={finalSchedule}
-            onEditShift={handleEditShift}
-            onAssignEmployee={handleAssignEmployeeWrapper}
-            onUnassignEmployee={handleUnassignEmployeeWrapper}
-            onRefreshData={handleRefreshData}
-          />
-        );
-
-      case 'employees':
-        return <Employees />;
-
-      case 'availability':
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Availability Management</h2>
-
-            {/* Admin View */}
-
-            {/* All Submissions View */}
-            <div>
-              <h3 className="text-xl font-semibold mb-4">All Availability Submissions</h3>
-            <AvailabilityPanel
-              initialWeekStart={getCurrentWeekStart()}
+    // Admin views
+    if (user?.role === 'admin') {
+      switch (currentView) {
+        case 'schedule':
+          return (
+            <ScheduleView
+              employees={employees}
+              conflicts={schedule?.conflicts || []}
+              finalSchedule={finalSchedule}
+              onRefreshData={handleRefreshData}
             />
-            </div>
-          </div>
-        );
+          );
 
-      case 'dashboard':
-      default:
-        return (
-          <Dashboard
-            schedule={schedule}
-            employees={employees}
-            onViewSchedule={() => setCurrentView('schedule')}
-            onViewSuggestions={() => setCurrentView('suggestions')}
-          />
-        );
+        case 'employees':
+          return <Employees />;
+
+        case 'availability':
+          return (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold">Availability Management</h2>
+              <AvailabilityPanel
+                initialWeekStart={getCurrentWeekStart()}
+              />
+            </div>
+          );
+
+        case 'dashboard':
+        default:
+          return (
+            <Dashboard
+              schedule={schedule}
+              employees={employees}
+              onViewSchedule={() => setCurrentView('schedule')}
+            />
+          );
+      }
     }
+
+    // Crew views
+    if (user?.role === 'crew') {
+      switch (currentView) {
+        case 'availability':
+          return (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold">Submit Availability</h2>
+              <CrewAvailabilityPanel employeeId={user.id} />
+            </div>
+          );
+
+        case 'profile':
+          return (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold">My Profile</h2>
+              <CrewProfileWrapper employeeId={user.id} />
+            </div>
+          );
+
+        case 'dashboard':
+        default:
+          return (
+            <CrewDashboard employeeId={user.id} />
+          );
+      }
+    }
+
+    // Fallback
+    return (
+      <div className="text-center py-12">
+        <p>Unable to load dashboard. Please contact support.</p>
+      </div>
+    );
   };
 
 
@@ -166,13 +154,26 @@ export default function App() {
     return `${year}-${month}-${day}`;
   };
 
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Show login form if not authenticated
+  if (!isAuthenticated) {
+    return <LoginForm />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation Sidebar */}
       <Navigation
         currentView={currentView}
         onViewChange={handleViewChange}
-        suggestionsCount={schedule?.suggestions?.length || 0}
       />
 
       {/* Main Content */}
@@ -185,7 +186,10 @@ export default function App() {
       <Toaster
         position="top-right"
         toastOptions={{
-          duration: 4000,
+          duration: 700,
+          style: {
+            animationDuration: '0.1s',
+          },
         }}
       />
     </div>

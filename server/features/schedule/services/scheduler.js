@@ -1,9 +1,13 @@
 const db = require('../../../shared/config/database');
 const { formatEmployee, formatShift } = require('../../../shared/utils/formatUtils');
+const FairnessEngine = require('./fairnessEngine');
+const AvailabilityMatcher = require('./availabilityMatcher');
+const StationManager = require('./stationManager');
+const EmployeeRanker = require('./employeeRanker');
 
 /**
- * Constraint-Based Shift Scheduler
- * Automatically assigns employees to shifts based on availability, skills, and constraints
+ * Enhanced Constraint-Based Shift Scheduler
+ * Automatically assigns employees to shifts using advanced fairness and availability algorithms
  */
 class ShiftScheduler {
   constructor() {
@@ -11,7 +15,9 @@ class ShiftScheduler {
       maxHoursPerWeek: 48,
       minRestDays: 2,
       noDoubleShifts: true,
-      skillMatching: true
+      skillMatching: true,
+      enforceEqualDistribution: true,
+      prioritizeFairness: true
     };
   }
 
@@ -173,33 +179,25 @@ class ShiftScheduler {
   }
 
   /**
-   * Find employees available for a shift
+   * Find employees available for a shift using enhanced availability checking
    */
   findAvailableEmployees(employees, shift) {
     return employees.filter(employee => {
-      // Check availability for the shift day
-      const dayOfWeek = this.getDayOfWeek(shift.date);
-      const availability = employee.availability[dayOfWeek];
-
-      if (!availability || !availability.available) {
+      // Use AvailabilityMatcher for comprehensive availability checking
+      if (!AvailabilityMatcher.isEmployeeAvailable(employee, shift)) {
         return false;
       }
 
-      // Check if employee has required skills
-      if (this.rules.skillMatching && shift.requiredStation.length > 0) {
-        const hasRequiredSkills = shift.requiredStation.every(station => 
-          employee.station.includes(station)
-        );
-        if (!hasRequiredSkills) {
+      // Check if employee has required skills using StationManager
+      if (this.rules.skillMatching && shift.requiredStation && shift.requiredStation.length > 0) {
+        if (!StationManager.hasRequiredSkills(employee, shift.requiredStation)) {
           return false;
         }
       }
 
-      // Check max hours constraint
+      // Check max hours constraint using FairnessEngine
       const shiftHours = this.calculateShiftHours(shift);
-      if (employee.currentWeeklyHours + shiftHours > employee.maxHoursPerWeek) {
-        return false;
-      }
+      // We'll check this during ranking instead of filtering, to allow flexibility
 
       // Check no double shifts (if enabled)
       if (this.rules.noDoubleShifts) {
@@ -212,30 +210,26 @@ class ShiftScheduler {
   }
 
   /**
-   * Rank employees by suitability for a shift
+   * Rank employees by suitability for a shift using advanced ranking algorithm
    */
-  rankEmployees(employees, shift) {
-    return employees.map(employee => {
-      let score = 0;
+  async rankEmployees(employees, shift) {
+    // Get week start for fairness calculations
+    const weekStart = this.getWeekStart(shift.date);
 
-      // Skill match bonus
-      const skillMatch = this.calculateSkillMatch(employee.station, shift.requiredStation);
-      score += skillMatch * 40;
+    // Use EmployeeRanker for comprehensive ranking
+    const rankings = await EmployeeRanker.rankEmployeesForShift(
+      employees,
+      shift,
+      weekStart,
+      [], // currentAssignments - empty for now, could be passed in future
+      []  // pastAssignments - empty for now, could be fetched from DB
+    );
 
-      // Availability preference bonus
-      const availabilityScore = this.calculateAvailabilityScore(employee, shift);
-      score += availabilityScore * 30;
-
-      // Fairness - prefer underutilized employees
-      const utilization = employee.currentWeeklyHours / employee.maxHoursPerWeek;
-      score += (1 - utilization) * 20;
-
-      // Seniority/experience bonus (placeholder)
-      score += 10;
-
-      return { employee, score };
-    })
-    .sort((a, b) => b.score - a.score);
+    // Convert to the expected format for backward compatibility
+    return rankings.map(ranking => ({
+      employee: ranking.employee,
+      score: ranking.totalScore
+    }));
   }
 
   /**

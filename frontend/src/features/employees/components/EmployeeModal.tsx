@@ -26,24 +26,26 @@ interface EmployeeModalProps {
 export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, onSubmit, initialData, departments, stations }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [department, setDepartment] = useState<'Service' | 'Production'>('Service');
   const [selectedStations, setSelectedStations] = useState<string[]>([]);
   const [maxHoursPerWeek, setMaxHoursPerWeek] = useState(40);
   const [currentWeeklyHours, setCurrentWeeklyHours] = useState(0);
   const [availability, setAvailability] = useState<WeeklyAvailability>({
-    monday: { available: false },
-    tuesday: { available: false },
-    wednesday: { available: false },
-    thursday: { available: false },
-    friday: { available: false },
-    saturday: { available: false },
-    sunday: { available: false }
+    monday: { available: true },
+    tuesday: { available: true },
+    wednesday: { available: true },
+    thursday: { available: true },
+    friday: { available: true },
+    saturday: { available: true },
+    sunday: { available: true }
   });
 
   useEffect(() => {
     if (initialData) {
       setName(initialData.name);
       setEmail(initialData.email);
+      setPassword(''); // Don't populate password for editing
       setDepartment(initialData.department);
       if (Array.isArray(initialData.station)) {
         setSelectedStations(initialData.station);
@@ -58,30 +60,32 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
     } else {
       setName('');
       setEmail('');
+      setPassword(''); // Will be set to name when creating
       setDepartment('Service');
       setSelectedStations([]);
       setMaxHoursPerWeek(40);
       setCurrentWeeklyHours(0);
       setAvailability({
-        monday: { available: false },
-        tuesday: { available: false },
-        wednesday: { available: false },
-        thursday: { available: false },
-        friday: { available: false },
-        saturday: { available: false },
-        sunday: { available: false }
+        monday: { available: true },
+        tuesday: { available: true },
+        wednesday: { available: true },
+        thursday: { available: true },
+        friday: { available: true },
+        saturday: { available: true },
+        sunday: { available: true }
       });
     }
   }, [initialData, isOpen]);
 
   const handleSubmit = async () => {
     try {
-      const employeeData = { 
-        name, 
-        email, 
-        department, 
-        station: selectedStations, 
-        maxHoursPerWeek, 
+      const employeeData = {
+        name,
+        email,
+        password: initialData ? undefined : (password || name), // Use provided password or default to name for new employees
+        department,
+        station: selectedStations,
+        maxHoursPerWeek,
         currentWeeklyHours,
         availability
       };
@@ -132,6 +136,20 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
               className="col-span-3"
             />
           </div>
+
+          {!initialData && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="password" className="text-right">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Leave blank to use name as password"
+                className="col-span-3"
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="department" className="text-right">Department</Label>

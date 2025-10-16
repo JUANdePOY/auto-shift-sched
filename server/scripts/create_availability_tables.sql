@@ -14,9 +14,9 @@ CREATE TABLE IF NOT EXISTS availability_submissions (
 );
 
 -- Create index for faster queries
-CREATE INDEX idx_availability_employee_week ON availability_submissions(employee_id, week_start);
-CREATE INDEX idx_availability_week_locked ON availability_submissions(week_start, is_locked);
-CREATE INDEX idx_availability_submission_date ON availability_submissions(submission_date);
+CREATE INDEX IF NOT EXISTS idx_availability_employee_week ON availability_submissions(employee_id, week_start);
+CREATE INDEX IF NOT EXISTS idx_availability_week_locked ON availability_submissions(week_start, is_locked);
+CREATE INDEX IF NOT EXISTS idx_availability_submission_date ON availability_submissions(submission_date);
 
 -- Update employees table to include default availability if needed
 ALTER TABLE employees 

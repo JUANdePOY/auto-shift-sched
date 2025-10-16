@@ -11,4 +11,7 @@ const db = mysql.createPool({
   queueLimit: 0
 });
 
-module.exports = db;
+// Use promise-based API
+const promiseDb = db.promise();
+
+module.exports = promiseDb;

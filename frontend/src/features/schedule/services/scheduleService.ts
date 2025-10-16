@@ -1,6 +1,14 @@
 import type { Shift, WeeklySchedule, ScheduleConflict, Employee } from '../../shared/types';
 
-const API_URL = `http://${window.location.hostname}:3001/api`;
+const API_URL = '/api';
+
+const getAuthHeaders = (): HeadersInit => {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+};
 
 /**
  * Fetches the weekly schedule from the API.
@@ -8,7 +16,9 @@ const API_URL = `http://${window.location.hostname}:3001/api`;
  * @returns A promise that resolves to the weekly schedule object.
  */
 export async function getWeeklySchedule(weekStart: string): Promise<WeeklySchedule> {
-  const response = await fetch(`${API_URL}/schedule/week?startDate=${weekStart}`);
+  const response = await fetch(`${API_URL}/schedule/week?startDate=${weekStart}`, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error('Failed to fetch weekly schedule');
   }
@@ -20,7 +30,9 @@ export async function getWeeklySchedule(weekStart: string): Promise<WeeklySchedu
  * @returns A promise that resolves to an array of shifts.
  */
 export async function getAllShifts(): Promise<Shift[]> {
-  const response = await fetch(`${API_URL}/shifts`);
+  const response = await fetch(`${API_URL}/shifts`, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error('Failed to fetch shifts');
   }

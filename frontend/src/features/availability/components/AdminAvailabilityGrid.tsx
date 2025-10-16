@@ -98,7 +98,7 @@ export const AdminAvailabilityGrid: React.FC = () => {
       {/* Header and Controls */}
       <Card>
         <CardHeader>
-          <CardTitle>Availability Management</CardTitle>
+          <CardTitle>Availability Managemen</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">

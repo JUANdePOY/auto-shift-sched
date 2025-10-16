@@ -4,6 +4,7 @@ const cors = require('cors');
 const errorHandler = require('./shared/middleware/errorHandler');
 
 // Import route handlers
+const authRoutes = require('./features/auth/routes/auth');
 const employeeRoutes = require('./features/employees/routes/employees');
 const shiftRoutes = require('./features/schedule/routes/shifts');
 const scheduleRoutes = require('./features/schedule/routes/schedule');
@@ -11,6 +12,7 @@ const scheduleGenerationRoutes = require('./features/schedule/routes/scheduleGen
 const assignmentRoutes = require('./features/schedule/routes/assignments');
 const departmentRoutes = require('./features/employees/routes/departments');
 const availabilityRoutes = require('./features/availability/routes/availability');
+const crewRoutes = require('./features/crew/routes/crew');
 
 const app = express();
 const port = 3001;
@@ -234,6 +236,7 @@ app.get('/', (req, res) => {
 });
 
 // Use modular routes
+app.use('/api/auth', authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shifts', shiftRoutes);
 app.use('/api/schedule', scheduleRoutes);
@@ -241,6 +244,7 @@ app.use('/api/schedule-generation', scheduleGenerationRoutes);
 app.use('/api/shifts', assignmentRoutes); // Assignment routes are mounted under /api/shifts
 app.use('/api/departments', departmentRoutes);
 app.use('/api/availability', availabilityRoutes);
+app.use('/api/crew', crewRoutes);
 
 // Error handling middleware (should be last)
 app.use(errorHandler);
