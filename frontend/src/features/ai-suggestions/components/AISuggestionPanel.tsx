@@ -49,6 +49,7 @@ export function AISuggestionsPanel({
   shiftTime,
   shiftEndTime,
   shiftDate,
+  department,
   requiredStations = [],
   availableEmployees = [],
   mode = 'full',
@@ -69,6 +70,8 @@ export function AISuggestionsPanel({
 
   // Helper function to check if shift time overlaps with employee availability
   const isTimeAvailable = (employee: Employee, shiftDate: string, shiftStart: string, shiftEnd: string): boolean => {
+    if (!employee.availability) return false;
+
     const dayOfWeek = new Date(shiftDate).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof typeof employee.availability;
     const availability = employee.availability[dayOfWeek];
 
@@ -349,8 +352,45 @@ export function AISuggestionsPanel({
                 </SelectTrigger>
                 <SelectContent>
                   {availableEmployees.filter(employee => {
-                    const employeeStations = Array.isArray(employee.station) ? employee.station : [employee.station];
-                    return requiredStations.some(station => employeeStations.includes(station));
+                    if (!employee.station) return false;
+
+                    // Convert employee stations to array and clean up
+                    let employeeStations: string[] = [];
+
+                    if (Array.isArray(employee.station)) {
+                      // Handle nested array structure
+                      employeeStations = employee.station.flat().map(s => {
+                        if (typeof s === 'string') {
+                          return s.trim().toLowerCase();
+                        }
+                        if (typeof s === 'object' && s !== null && 'name' in s) {
+                          const name = (s as { name: unknown }).name;
+                          return typeof name === 'string' ? name.trim().toLowerCase() : '';
+                        }
+                        return String(s).trim().toLowerCase();
+                      });
+                    } else if (typeof employee.station === 'string') {
+                      // Handle single string with possible commas
+                      employeeStations = employee.station.split(',').map(s => s.trim().toLowerCase());
+                    } else {
+                      // Handle any other case by converting to string
+                      employeeStations = String(employee.station).split(',').map(s => s.trim().toLowerCase());
+                    }
+
+                    // Remove any empty strings from the array
+                    employeeStations = employeeStations.filter(s => s !== '');
+
+                    // Clean up required stations
+                    const trimmedRequiredStations = requiredStations
+                      .filter(s => s != null && s !== '')
+                      .map(s => s.trim().toLowerCase());
+
+                    // Check for matches and store matching stations
+                    const matchingStations = trimmedRequiredStations.filter(required =>
+                      employeeStations.includes(required)
+                    );
+
+                    return matchingStations.length > 0 && employee.department === department;
                   }).map(employee => {
                     // Get actual current scheduled hours for the week
                     const currentHours = employeeCurrentHours[employee.id] || 0;

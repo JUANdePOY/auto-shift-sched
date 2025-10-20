@@ -151,7 +151,7 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
             endTime: shift.endTime.slice(0, 5), // Ensure HH:MM format for frontend
             title: shift.title,
             department: shift.department || departments[0]?.name || 'General',
-            requiredStation: Array.isArray(shift.requiredStation) ? shift.requiredStation : [],
+            requiredStation: Array.isArray(shift.requiredStation) ? shift.requiredStation.map(s => String(s).trim().toLowerCase()) : [],
             status: 'unassigned',
             type: getShiftType(shift.startTime.slice(0, 5))
           }));
@@ -170,13 +170,43 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
     return employees.filter(employee => {
       if (!employee.station) return false;
 
-      // Handle both string and array cases for employee.station
-      const employeeStations = Array.isArray(employee.station) ? employee.station : [employee.station];
-      const hasMatchingStation = employeeStations.some((station: string) =>
-        shift.requiredStation.includes(station)
+      // Convert employee stations to array and clean up
+      let employeeStations: string[] = [];
+      
+      if (Array.isArray(employee.station)) {
+        // Handle nested array structure
+        employeeStations = employee.station.flat().map(s => {
+          if (typeof s === 'string') {
+            return s.trim().toLowerCase();
+          }
+          if (typeof s === 'object' && s !== null && 'name' in s) {
+            const name = (s as { name: unknown }).name;
+            return typeof name === 'string' ? name.trim().toLowerCase() : '';
+          }
+          return String(s).trim().toLowerCase();
+        });
+      } else if (typeof employee.station === 'string') {
+        // Handle single string with possible commas
+        employeeStations = employee.station.split(',').map(s => s.trim().toLowerCase());
+      } else {
+        // Handle any other case by converting to string
+        employeeStations = String(employee.station).split(',').map(s => s.trim().toLowerCase());
+      }
+      
+      // Remove any empty strings from the array
+      employeeStations = employeeStations.filter(s => s !== '');
+
+      // Clean up required stations
+      const trimmedRequiredStations = shift.requiredStation
+        .filter(s => s != null && s !== '')
+        .map(s => s.trim().toLowerCase());
+      
+      // Check for matches and store matching stations
+      const matchingStations = trimmedRequiredStations.filter(required => 
+        employeeStations.includes(required)
       );
 
-      return hasMatchingStation && employee.department === shift.department;
+      return matchingStations.length > 0 && employee.department === shift.department;
     });
   };
 
@@ -319,7 +349,7 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
       endTime: calculateEndTime(newShiftForm.time),
       title: newShiftForm.title,
       department: newShiftForm.department,
-      requiredStation: newShiftForm.requiredStation,
+      requiredStation: newShiftForm.requiredStation.map(s => s.trim().toLowerCase()),
       status: 'unassigned',
       type: getShiftType(newShiftForm.time)
     };
@@ -379,14 +409,14 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
               time: editForm.startTime,
               endTime: editForm.endTime,
               department: editForm.department,
-              requiredStation: editForm.requiredStation,
+              requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase()),
               type: getShiftType(editForm.startTime),
               // If the assigned employee no longer matches the new department/stations, unassign them
               assignedEmployee: assignment.assignedEmployee &&
                 getAvailableEmployees({
                   ...assignment,
                   department: editForm.department,
-                  requiredStation: editForm.requiredStation
+                  requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase())
                 }).some(emp => emp.id === assignment.assignedEmployee?.id)
                 ? assignment.assignedEmployee
                 : undefined,
@@ -394,7 +424,7 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
                 getAvailableEmployees({
                   ...assignment,
                   department: editForm.department,
-                  requiredStation: editForm.requiredStation
+                  requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase())
                 }).some(emp => emp.id === assignment.assignedEmployee?.id)
                 ? 'assigned'
                 : 'unassigned'
@@ -586,7 +616,7 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
                         <div className="flex flex-wrap gap-1">
                           {assignment.requiredStation.map((station, idx) => (
                             <Badge key={idx} variant="secondary" className="text-xs">
-                              {station}
+                              {station.replace(/\b\w/g, l => l.toUpperCase())}
                             </Badge>
                           ))}
                         </div>
