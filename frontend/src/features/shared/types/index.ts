@@ -37,6 +37,8 @@ export interface WeeklyAvailability {
 
 export interface DayAvailability {
   available: boolean;
+  startTime?: string; // Format: "HH:MM"
+  endTime?: string;   // Format: "HH:MM"
   preferredStart?: string; // Format: "HH:MM"
   preferredEnd?: string;   // Format: "HH:MM"
   notes?: string;

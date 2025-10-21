@@ -11,8 +11,8 @@ router.get('/', async (req, res) => {
       'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, created_at, updated_at FROM employees'
     );
 
-    // Parse JSON fields
-    const formattedEmployees = employees.map(emp => {
+    // Parse JSON fields and fetch availability
+    const formattedEmployees = await Promise.all(employees.map(async emp => {
       let station = [];
       if (emp.station) {
         try {
@@ -22,11 +22,30 @@ router.get('/', async (req, res) => {
           station = [emp.station];
         }
       }
+
+      // Fetch current week's availability from availability_submissions
+      let availability = {};
+      try {
+        const availabilityService = require('../../availability/services/availabilityService');
+        const currentWeekStart = new Date();
+        currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay() + 1); // Monday of current week
+        const weekStartStr = currentWeekStart.toISOString().split('T')[0];
+
+        const availabilityData = await availabilityService.getAvailability(emp.id, weekStartStr);
+        if (availabilityData && availabilityData.availability) {
+          availability = availabilityData.availability;
+        }
+      } catch (error) {
+        console.warn(`Could not fetch availability for employee ${emp.id}:`, error.message);
+        // Keep availability as empty object
+      }
+
       return {
         ...emp,
-        station
+        station,
+        availability
       };
-    });
+    }));
 
     res.json(formattedEmployees);
   } catch (error) {
@@ -59,6 +78,25 @@ router.get('/:id', async (req, res) => {
       }
     }
     employee.station = station;
+
+    // Fetch current week's availability from availability_submissions
+    let availability = {};
+    try {
+      const availabilityService = require('../../availability/services/availabilityService');
+      const currentWeekStart = new Date();
+      currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay() + 1); // Monday of current week
+      const weekStartStr = currentWeekStart.toISOString().split('T')[0];
+
+      const availabilityData = await availabilityService.getAvailability(employee.id, weekStartStr);
+      if (availabilityData && availabilityData.availability) {
+        availability = availabilityData.availability;
+      }
+    } catch (error) {
+      console.warn(`Could not fetch availability for employee ${employee.id}:`, error.message);
+      // Keep availability as empty object
+    }
+
+    employee.availability = availability;
 
     res.json(employee);
   } catch (error) {

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { AISuggestionsPanel } from '../../ai-suggestions/components/AISuggestionPanel';
 import EditShiftDialog from './EditShiftDialog';
+
 import type { Employee, Department, AISuggestion } from '../../../features/shared/types';
 import type { TemporaryAssignment } from '../contexts/TemporaryScheduleContext';
 import { getAllDepartments } from '../../employees/services/departmentService';

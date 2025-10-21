@@ -44,36 +44,51 @@ class ShiftScheduler {
       // Generate dates in range
       const dates = this.getDatesInRange(startDate, endDate);
 
+      // Track daily assignments to prevent multiple shifts per employee per day
+      const dailyAssignments = new Map(); // date -> Set of employeeIds
+
       // Assign employees to shifts for each date
       const assignments = [];
       const conflicts = [];
 
       for (const date of dates) {
+        // Initialize daily assignments for this date if not exists
+        if (!dailyAssignments.has(date)) {
+          dailyAssignments.set(date, new Set());
+        }
+
         for (const shift of sortedShifts) {
           // Create a shift instance for this date
           const shiftWithDate = { ...shift, date };
 
           const availableEmployees = this.findAvailableEmployees(employees, shiftWithDate);
 
-          if (availableEmployees.length === 0) {
+          // Filter out employees already assigned on this date
+          const unassignedEmployees = availableEmployees.filter(emp =>
+            !dailyAssignments.get(date).has(emp.id)
+          );
+
+          if (unassignedEmployees.length === 0) {
             conflicts.push({
               type: 'no_available_employees',
               shiftId: shift.id,
               date: date,
-              message: `No available employees for ${shift.title} on ${date}`
+              message: `No available employees for ${shift.title} on ${date} (all eligible employees already assigned)`
             });
             continue;
           }
 
           // Rank employees by suitability
-          const rankedEmployees = this.rankEmployees(availableEmployees, shiftWithDate);
+          const rankedEmployees = this.rankEmployees(unassignedEmployees, shiftWithDate);
 
           // Assign top-ranked employees
           const assigned = this.assignEmployeesToShift(rankedEmployees, shiftWithDate);
           assignments.push(...assigned);
 
-          // Update employee hours
+          // Track daily assignments and update employee hours
           assigned.forEach(assignment => {
+            dailyAssignments.get(date).add(assignment.employeeId);
+
             const employee = employees.find(emp => emp.id === assignment.employeeId);
             if (employee) {
               const shiftHours = this.calculateShiftHours(shift);

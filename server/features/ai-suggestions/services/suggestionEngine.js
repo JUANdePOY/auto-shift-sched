@@ -77,14 +77,14 @@ class SuggestionEngine {
       // Check availability for the shift day
       const dayOfWeek = this.getDayOfWeek(shift.date);
       const availability = employee.availability[dayOfWeek];
-      
+
       if (!availability || !availability.available) {
         return false;
       }
 
       // Check if employee has required skills
       if (shift.requiredSkills.length > 0) {
-        const hasRequiredSkills = shift.requiredSkills.every(skill => 
+        const hasRequiredSkills = shift.requiredSkills.every(skill =>
           employee.skills.includes(skill)
         );
         if (!hasRequiredSkills) return false;
@@ -100,6 +100,11 @@ class SuggestionEngine {
         if (shiftStart < preferredStart || shiftEnd > preferredEnd) {
           return false;
         }
+      }
+
+      // Check if employee is already assigned on this date (prevent multiple shifts per day)
+      if (this.isEmployeeAlreadyAssigned(employee.id, shift.date)) {
+        return false;
       }
 
       return true;
@@ -238,6 +243,36 @@ class SuggestionEngine {
     }
 
     return reasons;
+  }
+
+  /**
+   * Check if employee is already assigned on a specific date
+   * @param {number} employeeId - Employee ID
+   * @param {string} date - Date string (YYYY-MM-DD)
+   * @returns {boolean} True if already assigned
+   */
+  async isEmployeeAlreadyAssigned(employeeId, date) {
+    try {
+      // Check both schedule_assignments and final_schedule tables
+      const [scheduleAssignments] = await db.query(
+        'SELECT id FROM schedule_assignments WHERE employee_id = ? AND assignment_date = ? LIMIT 1',
+        [employeeId, date]
+      );
+
+      if (scheduleAssignments.length > 0) {
+        return true;
+      }
+
+      const [finalSchedule] = await db.query(
+        'SELECT id FROM final_schedule WHERE employee_id = ? AND date_schedule = ? LIMIT 1',
+        [employeeId, date]
+      );
+
+      return finalSchedule.length > 0;
+    } catch (error) {
+      console.warn(`Error checking assignments for employee ${employeeId} on ${date}:`, error.message);
+      return false; // Assume not assigned if there's an error
+    }
   }
 
   /**
