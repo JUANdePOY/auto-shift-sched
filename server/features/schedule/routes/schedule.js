@@ -123,14 +123,38 @@ router.post('/generate', async (req, res, next) => {
 
 // POST suggest employees for a shift
 router.post('/suggest-employee', async (req, res, next) => {
-  const { shiftId } = req.body;
+  const { shiftId, date } = req.body;
 
   if (!shiftId) {
     return res.status(400).json({ error: 'shiftId is required' });
   }
 
+  if (!date) {
+    return res.status(400).json({ error: 'date is required' });
+  }
+
   try {
-    const suggestions = await SuggestionEngine.getEmployeeSuggestions(shiftId);
+    const suggestions = await SuggestionEngine.getEmployeeSuggestions(shiftId, date);
+    res.json(suggestions);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST suggest top unassigned employees for a shift
+router.post('/suggest-unassigned', async (req, res, next) => {
+  const { shiftId, date } = req.body;
+
+  if (!shiftId) {
+    return res.status(400).json({ error: 'shiftId is required' });
+  }
+
+  if (!date) {
+    return res.status(400).json({ error: 'date is required' });
+  }
+
+  try {
+    const suggestions = await SuggestionEngine.getTopUnassignedSuggestions(shiftId, date);
     res.json(suggestions);
   } catch (error) {
     next(error);
@@ -172,7 +196,7 @@ router.post('/save-final', async (req, res, next) => {
     return res.status(400).json({ error: 'date and assignments array are required' });
   }
 
-  const connection = await db.promise().getConnection();
+  const connection = await db.getConnection();
 
   try {
     await connection.beginTransaction();
@@ -291,16 +315,39 @@ router.get('/final/:date', async (req, res, next) => {
   }
 
   try {
-    // Fetch final schedule assignments directly filtered by date_schedule
+    // Fetch final schedule assignments with LEFT JOIN to handle missing shift/employee references
+    // Use data from final_schedule as fallback when JOINs fail
     const [finalRows] = await db.query(
-      `SELECT fs.shift_id, fs.employee_id, s.title as shift_title, fs.date_schedule as date, s.startTime, s.endTime, e.name as employee_name, fs.required_stations
+      `SELECT
+         fs.shift_id,
+         fs.employee_id,
+         COALESCE(s.title, fs.shift_title) as shift_title,
+         DATE(fs.date_schedule) as date,
+         COALESCE(s.startTime, fs.time_in) as startTime,
+         COALESCE(s.endTime, fs.time_out) as endTime,
+         COALESCE(e.name, fs.employee_name) as employee_name,
+         fs.required_stations
        FROM final_schedule fs
-       JOIN shifts s ON fs.shift_id = s.id
-       JOIN employees e ON fs.employee_id = e.id
-       WHERE fs.date_schedule = ?
-       ORDER BY s.startTime`,
+       LEFT JOIN shifts s ON fs.shift_id = s.id
+       LEFT JOIN employees e ON fs.employee_id = e.id
+       WHERE DATE(fs.date_schedule) = ?
+       ORDER BY COALESCE(s.startTime, fs.time_in)`,
       [date]
     );
+
+    // Parse required_stations JSON for each row
+    finalRows.forEach(row => {
+      if (row.required_stations) {
+        try {
+          row.required_stations = JSON.parse(row.required_stations);
+        } catch (e) {
+          console.warn('Failed to parse required_stations JSON:', row.required_stations);
+          row.required_stations = [];
+        }
+      } else {
+        row.required_stations = [];
+      }
+    });
 
     res.json(finalRows);
   } catch (error) {
@@ -323,17 +370,331 @@ router.get('/final/week/:startDate', async (req, res, next) => {
     endDateObj.setDate(startDateObj.getDate() + 6); // 7 days total including start date
     const endDate = endDateObj.toISOString().split('T')[0];
 
-    // Fetch final schedule for the week
+    // Fetch final schedule for the week - use LEFT JOIN and COALESCE to handle missing shift references
     const query = `
-      SELECT fs.shift_id, fs.employee_id, s.title as shift_title, LEFT(fs.date_schedule, 10) as date, s.startTime, s.endTime, e.name as employee_name, fs.required_stations
+      SELECT fs.shift_id, fs.employee_id, COALESCE(s.title, fs.shift_title) as shift_title, fs.date_schedule as date, COALESCE(s.startTime, fs.time_in) as startTime, COALESCE(s.endTime, fs.time_out) as endTime, COALESCE(e.name, fs.employee_name) as employee_name, fs.required_stations
       FROM final_schedule fs
-      JOIN shifts s ON fs.shift_id = s.id
-      JOIN employees e ON fs.employee_id = e.id
-      WHERE LEFT(fs.date_schedule, 10) BETWEEN ? AND ?
+      LEFT JOIN shifts s ON fs.shift_id = s.id
+      LEFT JOIN employees e ON fs.employee_id = e.id
+      WHERE fs.date_schedule BETWEEN ? AND ?
     `;
     const [results] = await db.query(query, [startDate, endDate]);
 
+    // Parse required_stations JSON for each row
+    results.forEach(row => {
+      if (row.required_stations) {
+        try {
+          row.required_stations = JSON.parse(row.required_stations);
+        } catch (e) {
+          console.warn('Failed to parse required_stations JSON:', row.required_stations);
+          row.required_stations = [];
+        }
+      } else {
+        row.required_stations = [];
+      }
+    });
+
     res.json(results);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET dashboard data - weekly schedule summary with conflicts
+router.get('/dashboard/week-summary/:weekStart', async (req, res, next) => {
+  const { weekStart } = req.params;
+
+  try {
+    // Calculate end date (7 days after start date)
+    const startDateObj = new Date(weekStart);
+    const endDateObj = new Date(startDateObj);
+    endDateObj.setDate(startDateObj.getDate() + 6);
+    const endDate = endDateObj.toISOString().split('T')[0];
+
+    // Fetch final schedule for the week
+    const [assignments] = await db.query(
+      `SELECT fs.shift_id, fs.employee_id, s.title, fs.date_schedule as date, 
+              s.startTime, s.endTime, e.name as employee_name, s.requiredEmployees
+       FROM final_schedule fs
+       LEFT JOIN shifts s ON fs.shift_id = s.id
+       LEFT JOIN employees e ON fs.employee_id = e.id
+       WHERE fs.date_schedule BETWEEN ? AND ?
+       ORDER BY fs.date_schedule, s.startTime`,
+      [weekStart, endDate]
+    );
+
+    // Fetch all shifts for the week to calculate coverage
+    const [allShifts] = await db.query(
+      `SELECT DISTINCT s.id, s.title, s.startTime, s.endTime, s.requiredEmployees, COALESCE(COUNT(fs.employee_id), 0) as assignedCount
+       FROM shifts s
+       LEFT JOIN final_schedule fs ON s.id = fs.shift_id AND fs.date_schedule BETWEEN ? AND ?
+       GROUP BY s.id, s.title, s.startTime, s.endTime, s.requiredEmployees`,
+      [weekStart, endDate]
+    );
+
+    // Calculate coverage rate
+    const coveredShifts = allShifts.filter(s => s.assignedCount >= s.requiredEmployees).length;
+    const coverageRate = allShifts.length > 0 ? Math.round((coveredShifts / allShifts.length) * 100) : 0;
+
+    // Detect conflicts (overlapping shifts for same employee)
+    const conflictMap = new Map();
+    assignments.forEach(assignment => {
+      if (!assignment.employee_id) return;
+      
+      assignments.forEach(other => {
+        if (other.employee_id !== assignment.employee_id || other.date !== assignment.date) return;
+        if (assignment.shift_id >= other.shift_id) return; // Avoid duplicates
+        
+        // Check if times overlap
+        if (assignment.startTime < other.endTime && assignment.endTime > other.startTime) {
+          const conflictKey = `${assignment.employee_id}-${assignment.date}-${assignment.shift_id}-${other.shift_id}`;
+          conflictMap.set(conflictKey, {
+            type: 'overlap',
+            severity: 'error',
+            employeeId: assignment.employee_id,
+            employeeName: assignment.employee_name,
+            shiftIds: [assignment.shift_id, other.shift_id],
+            message: `${assignment.employee_name} assigned to overlapping shifts on ${assignment.date}`
+          });
+        }
+      });
+    });
+
+    const conflicts = Array.from(conflictMap.values());
+
+    res.json({
+      weekStart,
+      weekEnd: endDate,
+      assignments,
+      conflicts,
+      coverageRate,
+      totalShifts: allShifts.length,
+      coveredShifts
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET dashboard data - employee utilization for current week
+router.get('/dashboard/employee-utilization/:weekStart', async (req, res, next) => {
+  const { weekStart } = req.params;
+
+  try {
+    // Calculate end date (7 days after start date)
+    const startDateObj = new Date(weekStart);
+    const endDateObj = new Date(startDateObj);
+    endDateObj.setDate(startDateObj.getDate() + 6);
+    const endDate = endDateObj.toISOString().split('T')[0];
+
+    // Get all employees
+    const [employees] = await db.query('SELECT id, name, maxHoursPerWeek FROM employees');
+
+    // Get scheduled hours for each employee
+    const [assignments] = await db.query(
+      `SELECT e.id, e.name, e.maxHoursPerWeek, 
+              SUM(TIME_TO_SEC(TIMEDIFF(s.endTime, s.startTime)) / 3600) as scheduledHours
+       FROM employees e
+       LEFT JOIN final_schedule fs ON e.id = fs.employee_id AND fs.date_schedule BETWEEN ? AND ?
+       LEFT JOIN shifts s ON fs.shift_id = s.id
+       GROUP BY e.id, e.name, e.maxHoursPerWeek`,
+      [weekStart, endDate]
+    );
+
+    // Calculate utilization percentage for each employee and overall
+    const employeeUtilization = assignments.map(emp => {
+      const maxHours = emp.maxHoursPerWeek || 40;
+      const scheduled = emp.scheduledHours || 0;
+      const utilization = (scheduled / maxHours) * 100;
+      return {
+        employeeId: emp.id,
+        employeeName: emp.name,
+        maxHoursPerWeek: maxHours,
+        scheduledHours: parseFloat(scheduled || 0).toFixed(2),
+        utilizationPercentage: Math.min(utilization, 100)
+      };
+    });
+
+    // Calculate average utilization
+    const totalUtilization = employeeUtilization.reduce((sum, emp) => sum + emp.utilizationPercentage, 0);
+    const averageUtilization = employeeUtilization.length > 0 
+      ? Math.round(totalUtilization / employeeUtilization.length)
+      : 0;
+
+    // Count employees scheduled vs total
+    const employeesScheduled = employeeUtilization.filter(emp => emp.scheduledHours > 0).length;
+
+    res.json({
+      weekStart,
+      averageUtilization,
+      employeesScheduled,
+      totalEmployees: employees.length,
+      employeeDetails: employeeUtilization
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET dashboard data - monthly overview
+router.get('/dashboard/monthly-overview', async (req, res, next) => {
+  try {
+    // Get dates for current month and last month
+    const today = new Date();
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+      .toISOString().split('T')[0];
+    const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+      .toISOString().split('T')[0];
+    
+    const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+      .toISOString().split('T')[0];
+    const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0)
+      .toISOString().split('T')[0];
+
+    // Get current month stats
+    const [currentStats] = await db.query(
+      `SELECT 
+         COUNT(DISTINCT fs.shift_id) as totalShifts,
+         COUNT(fs.employee_id) as totalAssignments,
+         COUNT(DISTINCT fs.employee_id) as uniqueEmployees,
+         SUM(TIME_TO_SEC(TIMEDIFF(s.endTime, s.startTime)) / 3600) as totalHours
+       FROM final_schedule fs
+       LEFT JOIN shifts s ON fs.shift_id = s.id
+       WHERE fs.date_schedule BETWEEN ? AND ?`,
+      [currentMonthStart, currentMonthEnd]
+    );
+
+    // Get last month stats for comparison
+    const [lastStats] = await db.query(
+      `SELECT 
+         COUNT(DISTINCT fs.shift_id) as totalShifts,
+         COUNT(fs.employee_id) as totalAssignments,
+         COUNT(DISTINCT fs.employee_id) as uniqueEmployees,
+         SUM(TIME_TO_SEC(TIMEDIFF(s.endTime, s.startTime)) / 3600) as totalHours
+       FROM final_schedule fs
+       LEFT JOIN shifts s ON fs.shift_id = s.id
+       WHERE fs.date_schedule BETWEEN ? AND ?`,
+      [lastMonthStart, lastMonthEnd]
+    );
+
+    // Calculate coverage rate for current month
+    const [monthShifts] = await db.query(
+      `SELECT COUNT(DISTINCT s.id) as totalShifts,
+              COUNT(CASE WHEN a.assigned_count >= s.requiredEmployees THEN 1 END) as coveredShifts
+       FROM shifts s
+       LEFT JOIN (
+         SELECT shift_id, COUNT(*) as assigned_count
+         FROM final_schedule
+         WHERE date_schedule BETWEEN ? AND ?
+         GROUP BY shift_id
+       ) a ON s.id = a.shift_id`,
+      [currentMonthStart, currentMonthEnd]
+    );
+
+    const currentMonth = currentStats[0] || {};
+    const lastMonth = lastStats[0] || {};
+
+    const coverageRate = monthShifts[0]?.totalShifts > 0 
+      ? Math.round((monthShifts[0].coveredShifts / monthShifts[0].totalShifts) * 100)
+      : 0;
+
+    // Calculate percentage changes
+    const assignmentChange = lastMonth.totalAssignments > 0 
+      ? Math.round(((currentMonth.totalAssignments - lastMonth.totalAssignments) / lastMonth.totalAssignments) * 100)
+      : 0;
+
+    res.json({
+      month: today.toISOString().split('T')[0].slice(0, 7), // YYYY-MM format
+      currentMonth: {
+        totalShifts: currentMonth.totalShifts || 0,
+        totalAssignments: currentMonth.totalAssignments || 0,
+        uniqueEmployees: currentMonth.uniqueEmployees || 0,
+        totalHours: parseFloat(currentMonth.totalHours || 0).toFixed(2),
+        averageCoverageRate: coverageRate
+      },
+      percentageChanges: {
+        assignmentsChange: assignmentChange,
+        shiftsCovered: coverageRate
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET dashboard data - recent activity
+router.get('/dashboard/recent-activity', async (req, res, next) => {
+  try {
+    const activities = [];
+
+    // Get recent schedule publications
+    const [schedulePublications] = await db.query(
+      `SELECT 'schedule_published' as type, generated_at as date, CONCAT('Schedule published for week of ', week_start) as description
+       FROM schedule_generations
+       WHERE status = 'published'
+       ORDER BY generated_at DESC
+       LIMIT 5`
+    );
+
+    // Get recent availability submissions
+    const [availabilitySubmissions] = await db.query(
+      `SELECT 'availability_submitted' as type, submission_date as date, 
+              CONCAT('Availability submitted by employee for week of ', week_start) as description
+       FROM availability_submissions
+       ORDER BY submission_date DESC
+       LIMIT 5`
+    );
+
+    // Get recent employee additions
+    const [newEmployees] = await db.query(
+      `SELECT 'employee_added' as type, created_at as date, 
+              CONCAT('New employee added: ', name) as description
+       FROM employees
+       WHERE created_at IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 5`
+    );
+
+    // Get recent shift assignments
+    const [shiftAssignments] = await db.query(
+      `SELECT 'shift_assigned' as type, assigned_at as date,
+              CONCAT('Employee assigned to shift on ', assignment_date) as description
+       FROM schedule_assignments
+       ORDER BY assigned_at DESC
+       LIMIT 5`
+    );
+
+    // Combine all activities and sort by date
+    const allActivities = [
+      ...schedulePublications,
+      ...availabilitySubmissions,
+      ...newEmployees,
+      ...shiftAssignments
+    ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+
+    // Format activities with readable timestamps
+    const formattedActivities = allActivities.map(activity => {
+      const activityDate = new Date(activity.date);
+      const now = new Date();
+      const diffMs = now - activityDate;
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+      let timeAgo = 'Just now';
+      if (diffHours > 0 && diffHours < 24) {
+        timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+      } else if (diffDays > 0) {
+        timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      }
+
+      return {
+        type: activity.type,
+        description: activity.description,
+        timeAgo
+      };
+    });
+
+    res.json(formattedActivities);
   } catch (error) {
     next(error);
   }

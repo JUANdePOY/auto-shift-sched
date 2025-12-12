@@ -41,7 +41,66 @@ class AvailabilityService {
           throw new Error('Employee not found');
         }
 
-        // Return default empty availability since availability is now in submissions table
+        // Return default available availability for backward compatibility
+        const availableAvailability = {
+          monday: { available: false },
+          tuesday: { available: false },
+          wednesday: { available: false },
+          thursday: { available: false },
+          friday: { available: false },
+          saturday: { available: false },
+          sunday: { available: false }
+        };
+
+        return {
+          employeeId: parseInt(employeeId),
+          weekStart,
+          availability: availableAvailability,
+          isLocked: false,
+          submissionDate: null,
+          status: 'not_submitted'
+        };
+      }
+
+      const submission = results[0];
+      let availability;
+      let parseSuccess = false;
+      let isValidData = false;
+
+      try {
+        // MySQL JSON column returns parsed objects, not strings
+        if (submission.availability === null || submission.availability === undefined) {
+          console.warn(`Null or undefined availability for employee ${submission.employee_id}, week ${submission.week_start}`);
+          parseSuccess = false;
+        } else if (typeof submission.availability === 'object') {
+          // Already parsed by MySQL JSON column
+          availability = submission.availability;
+          parseSuccess = true;
+          isValidData = true;
+        } else if (typeof submission.availability === 'string') {
+          // Handle legacy string data or corrupted data
+          if (submission.availability === '[object Object]' ||
+              submission.availability === 'undefined' ||
+              submission.availability === 'null' ||
+              submission.availability.trim() === '') {
+            console.warn(`Invalid or corrupted string data in availability for employee ${submission.employee_id}, week ${submission.week_start}: ${submission.availability}`);
+            parseSuccess = false;
+          } else {
+            availability = JSON.parse(submission.availability);
+            parseSuccess = true;
+            isValidData = typeof availability === 'object' && availability !== null && !Array.isArray(availability);
+          }
+        } else {
+          console.warn(`Unexpected availability type for employee ${submission.employee_id}, week ${submission.week_start}: ${typeof submission.availability}`);
+          parseSuccess = false;
+        }
+      } catch (parseError) {
+        console.warn(`Invalid JSON in availability for employee ${submission.employee_id}, week ${submission.week_start}: ${submission.availability}`);
+        parseSuccess = false;
+      }
+
+      // If parsing failed or data is invalid, treat as not submitted
+      if (!parseSuccess || !isValidData) {
         return {
           employeeId: parseInt(employeeId),
           weekStart,
@@ -52,11 +111,10 @@ class AvailabilityService {
         };
       }
 
-      const submission = results[0];
       return {
         employeeId: submission.employee_id,
         weekStart: submission.week_start,
-        availability: JSON.parse(submission.availability),
+        availability,
         isLocked: submission.is_locked,
         submissionDate: submission.submission_date,
         status: submission.is_locked ? 'locked' : 'submitted'
@@ -193,18 +251,48 @@ class AvailabilityService {
         [weekStart]
       );
 
-      return results.map(submission => ({
-        id: submission.id,
-        employeeId: submission.employeeId,
-        employeeName: submission.employeeName,
-        department: submission.department,
-        station: submission.station,
-        weekStart: submission.weekStart,
-        availability: JSON.parse(submission.availability),
-        submissionDate: submission.submissionDate,
-        isLocked: submission.isLocked,
-        status: submission.isLocked ? 'locked' : 'submitted'
-      }));
+      return results.map(submission => {
+        let availability;
+        try {
+          // MySQL JSON column returns parsed objects, not strings
+          if (submission.availability === null || submission.availability === undefined) {
+            console.warn(`Null or undefined availability for employee ${submission.employeeId}, week ${submission.weekStart}`);
+            availability = { ...this.defaultAvailability };
+          } else if (typeof submission.availability === 'object') {
+            // Already parsed by MySQL JSON column
+            availability = submission.availability;
+          } else if (typeof submission.availability === 'string') {
+            // Handle legacy string data or corrupted data
+            if (submission.availability === '[object Object]' ||
+                submission.availability === 'undefined' ||
+                submission.availability === 'null' ||
+                submission.availability.trim() === '') {
+              console.warn(`Invalid or corrupted string data in availability for employee ${submission.employeeId}, week ${submission.weekStart}: ${submission.availability}`);
+              availability = { ...this.defaultAvailability };
+            } else {
+              availability = JSON.parse(submission.availability);
+            }
+          } else {
+            console.warn(`Unexpected availability type for employee ${submission.employeeId}, week ${submission.weekStart}: ${typeof submission.availability}`);
+            availability = { ...this.defaultAvailability };
+          }
+        } catch (parseError) {
+          console.warn(`Invalid JSON in availability for employee ${submission.employeeId}, week ${submission.weekStart}: ${submission.availability}`);
+          availability = { ...this.defaultAvailability };
+        }
+        return {
+          id: submission.id,
+          employeeId: submission.employeeId,
+          employeeName: submission.employeeName,
+          department: submission.department,
+          station: submission.station,
+          weekStart: submission.weekStart,
+          availability,
+          submissionDate: submission.submissionDate,
+          isLocked: submission.isLocked,
+          status: submission.isLocked ? 'locked' : 'submitted'
+        };
+      });
     } catch (error) {
       console.error('Error getting weekly submissions:', error);
       throw error;
@@ -224,13 +312,28 @@ class AvailabilityService {
         [employeeId]
       );
 
-      const history = results.map(submission => ({
-        weekStart: submission.week_start,
-        availability: JSON.parse(submission.availability),
-        submissionDate: submission.submission_date,
-        isLocked: submission.is_locked,
-        status: submission.is_locked ? 'locked' : 'submitted'
-      }));
+      const history = results.map(submission => {
+        let availability;
+        try {
+          // Handle cases where availability might be stored as "[object Object]"
+          if (submission.availability === '[object Object]' || !submission.availability || submission.availability.trim() === '') {
+            console.warn(`Invalid or empty JSON in availability history for employee ${employeeId}, week ${submission.week_start}: ${submission.availability}`);
+            availability = { ...this.defaultAvailability };
+          } else {
+            availability = JSON.parse(submission.availability);
+          }
+        } catch (parseError) {
+          console.warn(`Invalid JSON in availability history for employee ${employeeId}, week ${submission.week_start}: ${submission.availability}`);
+          availability = { ...this.defaultAvailability };
+        }
+        return {
+          weekStart: submission.week_start,
+          availability,
+          submissionDate: submission.submission_date,
+          isLocked: submission.is_locked,
+          status: submission.is_locked ? 'locked' : 'submitted'
+        };
+      });
 
       return {
         employeeId: parseInt(employeeId),
@@ -295,6 +398,14 @@ class AvailabilityService {
       // Get availability for the week
       const availability = await this.getAvailability(employeeId, weekStartStr);
 
+      // If no availability submitted, consider not available
+      if (availability.status === 'not_submitted') {
+        return {
+          available: false,
+          reason: 'No availability submitted'
+        };
+      }
+
       const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
       const dayName = days[dayOfWeek];
       const dayAvailability = availability.availability[dayName];
@@ -320,12 +431,19 @@ class AvailabilityService {
             reason: 'Outside preferred hours'
           };
         }
-      }
 
-      return {
-        available: true,
-        preferred: true
-      };
+        return {
+          available: true,
+          preferred: true
+        };
+      } else {
+        // If no preferred times set, not preferred
+        return {
+          available: true,
+          preferred: false,
+          reason: 'No preferred times set'
+        };
+      }
     } catch (error) {
       console.error('Error checking employee availability:', error);
       throw error;

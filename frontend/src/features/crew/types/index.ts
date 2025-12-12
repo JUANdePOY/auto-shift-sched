@@ -31,6 +31,7 @@ export interface CrewProfile {
   department: string;
   position: string;
   station?: string;
+  stations?: string[]; // Support for multiple stations
   maxHoursPerWeek: number;
   currentWeeklyHours: number;
   role: string;

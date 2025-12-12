@@ -1,4 +1,4 @@
-export interface Department {
+ export interface Department {
   id: string;
   name: 'Service' | 'Production';
   stations: Station[];
@@ -104,8 +104,10 @@ export interface AISuggestion {
     type: 'assign' | 'unassign' | 'swap';
     shiftId: string;
     employeeId: string;
+    employeeName?: string;
     targetEmployeeId?: string;
   };
+  reasons?: string[]; // Add reasons array to display availability and other reasons
 }
 
 export interface WeeklySchedule {

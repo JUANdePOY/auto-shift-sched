@@ -21,11 +21,11 @@ export function LoginForm({
                 </p>
               </div>
               <div className="grid gap-3">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="name">Name</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
+                  id="name"
+                  type="text"
+                  placeholder="Enter your name"
                   required
                 />
               </div>

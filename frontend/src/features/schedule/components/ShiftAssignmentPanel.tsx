@@ -1,102 +1,140 @@
-import React, { useState, useEffect } from 'react';
-import { Button } from '../../shared/components/ui/button';
-import { Badge } from '../../shared/components/ui/badge';
+// ==================== MAIN COMPONENT ====================
+
+import React, { useState, useEffect, useMemo } from 'react';
+import type { JSX } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../shared/components/ui/select';
-import { Input } from '../../shared/components/ui/input';
 import { Label } from '../../shared/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../shared/components/ui/dialog';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../shared/components/ui/table';
-import { Tooltip, TooltipTrigger, TooltipContent } from '../../shared/components/ui/tooltip';
-import { toast } from 'sonner';
-import {
-  Users,
-  Clock,
-  Zap,
-  Save,
-  RefreshCw,
-  UserMinus,
-  X,
-  Plus,
-  Trash2,
-  Edit,
-  Check,
-} from 'lucide-react';
+import { Users, X } from 'lucide-react';
 import { AISuggestionsPanel } from '../../ai-suggestions/components/AISuggestionPanel';
 import EditShiftDialog from './EditShiftDialog';
-
-import type { Employee, Department, AISuggestion } from '../../../features/shared/types';
-import type { TemporaryAssignment } from '../contexts/TemporaryScheduleContext';
-import { getAllDepartments } from '../../employees/services/departmentService';
-import { createShift, getAllShifts, updateShift } from '../services/scheduleService';
-
-interface ShiftAssignment {
-  id: string;
-  time: string;
-  endTime: string;
-  title: string;
-  department: string;
-  requiredStation: string[];
-  assignedEmployee?: Employee;
-  status: 'unassigned' | 'assigned' | 'conflict';
-  type: 'opener' | 'mid' | 'closer' | 'graveyard';
-}
-
-interface ShiftAssignmentPanelProps {
-  isOpen: boolean;
-  onClose: () => void;
-  date: string;
-  employees: Employee[];
-  onSaveFinalSchedule?: (date: string, assignments: Array<{ shiftId: string; employeeId: string }>, notes?: string) => Promise<void>;
-  isWeeklyMode?: boolean;
-  onSaveToTemporary?: (date: string, assignments: TemporaryAssignment[]) => void;
-}
+import ShiftAssignmentTable from './ShiftAssignmentTable';
+import AssignmentActions from './AssignmentActions';
+import AddShiftDialog from './AddShiftDialog';
+import { useAutoAssign } from '../hooks/useAutoAssign';
+import { useShiftData } from '../hooks/useShiftData';
+import { useAssignmentHandlers } from '../hooks/useAssignmentHandlers';
 
 
-// Helper function to determine shift type based on start time
-const getShiftType = (time: string): 'opener' | 'mid' | 'closer' | 'graveyard' => {
-  const hour = parseInt(time.split(':')[0], 10);
-  if (hour >= 6 && hour < 12) return 'opener';
-  if (hour >= 12 && hour < 18) return 'mid';
-  if (hour >= 18 && hour < 24) return 'closer';
-  return 'graveyard'; // 00:00 to 05:59
-};
+import { useTemporarySchedule } from '../contexts/TemporaryScheduleContext';
+import {
+  calculateWeeklyHoursFromFinalSchedule,
+  calculateWeeklyHoursFromTemporaryAssignments,
+  combineEmployeeHours,
+  getWeekDates
+} from '../utils/employeeHoursUtils';
 
-// Helper function to calculate end time (start + 6 hours)
-const calculateEndTime = (startTime: string): string => {
-  const [hours, minutes] = startTime.split(':').map(Number);
-  const startDate = new Date();
-  startDate.setHours(hours, minutes, 0, 0);
-  startDate.setHours(startDate.getHours() + 6);
-  return startDate.toTimeString().slice(0, 5); // HH:MM format
-};
+import type { ShiftAssignmentPanelProps } from '../types/shiftAssignmentTypes';
 
-const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
+const ShiftAssignmentPanel = ({
   isOpen,
   onClose,
   date,
   employees,
-  onSaveFinalSchedule
-}) => {
+  onSaveFinalSchedule,
+  viewMode = false,
+  finalSchedule
+}: ShiftAssignmentPanelProps): JSX.Element | null => {
+  // ==================== CONTEXT AND HOOKS ====================
+  const { assignments: contextAssignments, getAssignmentsForDate, updateAssignment, clearAssignmentsForDate } = useTemporarySchedule();
 
-  const [assignments, setAssignments] = useState<ShiftAssignment[]>([]);
-  const [isAutoAssigning, setIsAutoAssigning] = useState(false);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [stations, setStations] = useState<{ id: string; name: string }[]>([]);
+  // ==================== STATE MANAGEMENT ====================
   const [typeFilter, setTypeFilter] = useState<string>('all');
-
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [editingShift, setEditingShift] = useState<ShiftAssignment | null>(null);
-  const [newShiftForm, setNewShiftForm] = useState({
-    time: '09:00',
-    title: '',
-    department: '',
-    requiredStation: [] as string[]
-  });
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   // AI Suggestion Panel state
   const [showAISuggestionPanel, setShowAISuggestionPanel] = useState(false);
   const [selectedShiftForAI, setSelectedShiftForAI] = useState<string | null>(null);
 
+  // ==================== CUSTOM HOOKS ====================
+  const { assignments: dataAssignments, setAssignments: setDataAssignments, departments } = useShiftData(
+    isOpen,
+    date,
+    [],
+    employees,
+    getAssignmentsForDate
+  );
+
+  const {
+    newShiftForm,
+    showAddDialog,
+    setShowAddDialog,
+    editingShift,
+    handleAssignEmployee,
+    handleApplyAISuggestion,
+    handleSaveSchedule,
+    handleAddShift,
+    handleDeleteShift,
+    handleEditShift,
+    handleSaveEdit,
+    handleCloseEditDialog,
+    handleStationToggle,
+    handleFormChange
+  } = useAssignmentHandlers({
+    assignments: dataAssignments,
+    setAssignments: setDataAssignments,
+    employees,
+    date,
+    onSaveFinalSchedule,
+    onClose,
+    clearAssignmentsForDate,
+    updateAssignment,
+    departments
+  });
+
+  // Use the auto-assign hook
+  const { isAutoAssigning, handleAutoAssign } = useAutoAssign({
+    assignments: dataAssignments,
+    date,
+    employees,
+    onAssignmentsUpdate: setDataAssignments
+  });
+
+  // ==================== COMPUTED VALUES ====================
+  // Calculate employee current hours using useMemo
+  const employeeCurrentHours = useMemo(() => {
+    if (!date || date.trim() === '') return {};
+
+    const weekDates = getWeekDates(date);
+    // Convert finalSchedule to match Assignment interface (employee_id as string)
+    const convertedFinalSchedule = (finalSchedule || []).map(assignment => ({
+      ...assignment,
+      employee_id: assignment.employee_id.toString()
+    }));
+    const finalHours = calculateWeeklyHoursFromFinalSchedule(convertedFinalSchedule, weekDates);
+
+    // Build shiftId to time map from assignments
+    const shiftIdToTimeMap: Record<string, { startTime: string; endTime: string }> = {};
+    dataAssignments.forEach(assignment => {
+      shiftIdToTimeMap[assignment.id] = {
+        startTime: assignment.time,
+        endTime: assignment.endTime
+      };
+    });
+
+    const tempHours = calculateWeeklyHoursFromTemporaryAssignments(contextAssignments, weekDates, shiftIdToTimeMap);
+    return combineEmployeeHours(finalHours, tempHours);
+  }, [date, finalSchedule, contextAssignments, dataAssignments]);
+
+  // ==================== EFFECTS ====================
+  // Update assignments when context changes (for real-time UI updates)
+  useEffect(() => {
+    if (dataAssignments.length > 0) {
+      const tempAssignments = getAssignmentsForDate(date);
+      setDataAssignments(prevAssignments =>
+        prevAssignments.map(assignment => {
+          const temp = tempAssignments.find(t => t.shiftId === assignment.id);
+          if (temp) {
+            const employee = employees.find(e => e.id === temp.employeeId);
+            return { ...assignment, assignedEmployee: employee, status: 'assigned' as const };
+          } else {
+            return { ...assignment, assignedEmployee: undefined, status: 'unassigned' as const };
+          }
+        })
+      );
+    }
+  }, [contextAssignments, date, getAssignmentsForDate, employees, setDataAssignments, dataAssignments.length]);
+
+  // ==================== EVENT HANDLERS ====================
   // Handler to open AI suggestion panel when select employee is clicked
   const handleOpenAISuggestionPanel = (shiftId: string) => {
     setSelectedShiftForAI(shiftId);
@@ -109,350 +147,25 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
     setShowAISuggestionPanel(false);
   };
 
-  // Handler to apply AI suggestion
-  const handleApplyAISuggestion = (suggestion: AISuggestion) => {
-    handleAssignEmployee(selectedShiftForAI!, suggestion.action.employeeId);
-    handleCloseAISuggestionPanel();
-  };
-
-  // Fetch departments and stations on component mount
-  useEffect(() => {
-    const fetchDepartmentsAndStations = async () => {
-      try {
-        const depts = await getAllDepartments();
-        setDepartments(depts);
-        // Flatten stations from all departments
-        const allStations = depts.flatMap(dept => dept.stations);
-        setStations(allStations);
-      } catch (err) {
-        console.error('Failed to fetch departments:', err);
-        toast.error('Failed to load departments and stations');
-      }
-    };
-
-    if (isOpen) {
-      fetchDepartmentsAndStations();
-    }
-  }, [isOpen]);
-
-  // Reset assignments when date changes
-  useEffect(() => {
-    setAssignments([]);
-  }, [date]);
-
-  // Initialize shift assignments when departments are loaded or date changes
-  useEffect(() => {
-    const loadShifts = async () => {
-      if (isOpen && assignments.length === 0 && departments.length > 0 && stations.length > 0) {
-        try {
-          const fetchedShifts = await getAllShifts();
-          const initialAssignments: ShiftAssignment[] = fetchedShifts.map(shift => ({
-            id: shift.id,
-            time: shift.startTime.slice(0, 5), // Ensure HH:MM format for frontend
-            endTime: shift.endTime.slice(0, 5), // Ensure HH:MM format for frontend
-            title: shift.title,
-            department: shift.department || departments[0]?.name || 'General',
-            requiredStation: Array.isArray(shift.requiredStation) ? shift.requiredStation.map(s => String(s).trim().toLowerCase()) : [],
-            status: 'unassigned',
-            type: getShiftType(shift.startTime.slice(0, 5))
-          }));
-          setAssignments(initialAssignments);
-        } catch (error) {
-          console.error('Failed to fetch shifts:', error);
-          toast.error('Failed to load shifts from database');
-        }
-      }
-    };
-
-    loadShifts();
-  }, [isOpen, assignments.length, departments, stations, date]);
-
-  const getAvailableEmployees = (shift: ShiftAssignment) => {
-    return employees.filter(employee => {
-      if (!employee.station) return false;
-
-      // Convert employee stations to array and clean up
-      let employeeStations: string[] = [];
-      
-      if (Array.isArray(employee.station)) {
-        // Handle nested array structure
-        employeeStations = employee.station.flat().map(s => {
-          if (typeof s === 'string') {
-            return s.trim().toLowerCase();
-          }
-          if (typeof s === 'object' && s !== null && 'name' in s) {
-            const name = (s as { name: unknown }).name;
-            return typeof name === 'string' ? name.trim().toLowerCase() : '';
-          }
-          return String(s).trim().toLowerCase();
-        });
-      } else if (typeof employee.station === 'string') {
-        // Handle single string with possible commas
-        employeeStations = employee.station.split(',').map(s => s.trim().toLowerCase());
-      } else {
-        // Handle any other case by converting to string
-        employeeStations = String(employee.station).split(',').map(s => s.trim().toLowerCase());
-      }
-      
-      // Remove any empty strings from the array
-      employeeStations = employeeStations.filter(s => s !== '');
-
-      // Clean up required stations
-      const trimmedRequiredStations = shift.requiredStation
-        .filter(s => s != null && s !== '')
-        .map(s => s.trim().toLowerCase());
-      
-      // Check for matches and store matching stations
-      const matchingStations = trimmedRequiredStations.filter(required => 
-        employeeStations.includes(required)
-      );
-
-      return matchingStations.length > 0 && employee.department === shift.department;
-    });
-  };
-
-  const handleAssignEmployee = (shiftId: string, employeeId: string) => {
-    const employee = employees.find(emp => emp.id === employeeId);
-    if (!employee) return;
-
-    setAssignments(prev => prev.map(assignment =>
-      assignment.id === shiftId
-        ? { ...assignment, assignedEmployee: employee, status: 'assigned' }
-        : assignment
-    ));
-  };
-
-  const handleUnassignEmployee = (shiftId: string) => {
-    setAssignments(prev => prev.map(assignment =>
-      assignment.id === shiftId
-        ? { ...assignment, assignedEmployee: undefined, status: 'unassigned' }
-        : assignment
-    ));
-  };
-
-  const handleAutoAssign = async () => {
-    setIsAutoAssigning(true);
-
-    try {
-      // First, save all current shifts to database to get proper IDs
-      const savedShifts: Array<{ id: string; time: string; title: string; department: string; dbId: string }> = [];
-      for (const assignment of assignments) {
-        try {
-          const shiftData = {
-            title: assignment.title,
-            startTime: assignment.time,
-            endTime: assignment.endTime,
-            date: date,
-            requiredStation: assignment.requiredStation,
-            requiredEmployees: 1,
-            assignedEmployees: [],
-            isCompleted: false,
-            priority: 'medium' as const,
-            department: assignment.department
-          };
-
-          const savedShift = await createShift(shiftData);
-          savedShifts.push({ ...assignment, dbId: savedShift.id });
-        } catch (error) {
-          console.error('Failed to save shift:', assignment, error);
-        }
-      }
-
-      if (savedShifts.length === 0) {
-        toast.error('No shifts to assign. Please add shifts first.');
-        setIsAutoAssigning(false);
-        return;
-      }
-
-      // Calculate week start and end dates
-      const weekStart = new Date(date);
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekStart.getDay() === 0 ? -6 : 1));
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6);
-
-      const startDateStr = weekStart.toISOString().split('T')[0];
-      const endDateStr = weekEnd.toISOString().split('T')[0];
-
-      // Import the schedule service
-      const { generateAutomatedSchedule } = await import('../services/scheduleService');
-
-      // Generate automated schedule using crew availability
-      const result = await generateAutomatedSchedule(startDateStr, endDateStr);
-
-      // Update assignments with the generated assignments
-      const updatedAssignments = assignments.map(assignment => {
-        // Find saved shift that matches this assignment
-        const savedShift = savedShifts.find(s =>
-          s.time === assignment.time &&
-          s.title === assignment.title &&
-          s.department === assignment.department
-        );
-
-        if (savedShift) {
-          // Find assignment for this saved shift
-          const matchingAssignment = result.assignments.find(a => a.shiftId === savedShift.dbId);
-
-          if (matchingAssignment) {
-            const employee = employees.find(emp => emp.id === matchingAssignment.employeeId);
-            return {
-              ...assignment,
-              assignedEmployee: employee,
-              status: 'assigned' as const
-            };
-          }
-        }
-
-        return assignment;
-      });
-
-      setAssignments(updatedAssignments);
-      toast.success(`Auto-assignment completed! Coverage: ${result.coverageRate}%`);
-    } catch (error) {
-      console.error('Auto-assignment failed:', error);
-      toast.error('Auto-assignment failed. Please check crew availability.');
-    } finally {
-      setIsAutoAssigning(false);
-    }
-  };
-
-  const handleSaveSchedule = async () => {
-    if (!onSaveFinalSchedule) {
-      toast.error('Save function not available');
-      return;
-    }
-
-    try {
-      const formattedAssignments = assignments
-        .filter(assignment => assignment.assignedEmployee)
-        .map(assignment => ({
-          shiftId: assignment.id,
-          employeeId: assignment.assignedEmployee!.id
-        }));
-
-      await onSaveFinalSchedule(date, formattedAssignments);
-      toast.success('Final schedule saved successfully!');
-      onClose();
-    } catch (error) {
-      console.error('Failed to save final schedule:', error);
-      toast.error('Failed to save final schedule');
-    }
-  };
-
-  const handleAddShift = () => {
-    if (!newShiftForm.title || !newShiftForm.department || newShiftForm.requiredStation.length === 0) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    const newAssignment: ShiftAssignment = {
-      id: `shift-${Date.now()}`,
-      time: newShiftForm.time,
-      endTime: calculateEndTime(newShiftForm.time),
-      title: newShiftForm.title,
-      department: newShiftForm.department,
-      requiredStation: newShiftForm.requiredStation.map(s => s.trim().toLowerCase()),
-      status: 'unassigned',
-      type: getShiftType(newShiftForm.time)
-    };
-
-    setAssignments(prev => [...prev, newAssignment]);
-    setNewShiftForm({
-      time: '09:00',
-      title: '',
-      department: '',
-      requiredStation: []
-    });
-    setShowAddDialog(false);
-    toast.success('Shift added successfully!');
-  };
-
-  const handleDeleteShift = (shiftId: string) => {
-    setAssignments(prev => prev.filter(assignment => assignment.id !== shiftId));
-    toast.success('Shift deleted successfully!');
-  };
-
-  const handleStationToggle = (station: string) => {
-    setNewShiftForm(prev => ({
-      ...prev,
-      requiredStation: prev.requiredStation.includes(station)
-        ? prev.requiredStation.filter(s => s !== station)
-        : [...prev.requiredStation, station]
-    }));
-  };
-
-  const handleEditShift = (shift: ShiftAssignment) => {
-    setEditingShift(shift);
-  };
-
-  const handleSaveEdit = async (shiftId: string, editForm: {
-    department: string;
-    requiredStation: string[];
-    startTime: string;
-    endTime: string;
-  }) => {
-    try {
-      // Ensure time format is HH:MM:SS for database consistency
-      const formatTime = (time: string) => time.length === 5 ? `${time}:00` : time;
-
-      // Update the shift in the database
-      await updateShift(shiftId, {
-        startTime: formatTime(editForm.startTime),
-        endTime: formatTime(editForm.endTime),
-        department: editForm.department,
-        requiredStation: editForm.requiredStation
-      });
-
-      // Update local state
-      setAssignments(prev => prev.map(assignment =>
-        assignment.id === shiftId
-          ? {
-              ...assignment,
-              time: editForm.startTime,
-              endTime: editForm.endTime,
-              department: editForm.department,
-              requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase()),
-              type: getShiftType(editForm.startTime),
-              // If the assigned employee no longer matches the new department/stations, unassign them
-              assignedEmployee: assignment.assignedEmployee &&
-                getAvailableEmployees({
-                  ...assignment,
-                  department: editForm.department,
-                  requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase())
-                }).some(emp => emp.id === assignment.assignedEmployee?.id)
-                ? assignment.assignedEmployee
-                : undefined,
-              status: assignment.assignedEmployee &&
-                getAvailableEmployees({
-                  ...assignment,
-                  department: editForm.department,
-                  requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase())
-                }).some(emp => emp.id === assignment.assignedEmployee?.id)
-                ? 'assigned'
-                : 'unassigned'
-            }
-          : assignment
-      ));
-
-      toast.success('Shift updated successfully!');
-    } catch (error) {
-      console.error('Failed to update shift:', error);
-      toast.error('Failed to update shift in database');
-    }
-  };
-
-  const handleCloseEditDialog = () => {
-    setEditingShift(null);
-  };
-
+  // ==================== RENDER LOGIC ====================
   if (!isOpen) return null;
 
-  // Sort assignments by time for table display and apply type filter
-  const sortedAssignments = [...assignments]
-    .filter(assignment => typeFilter === 'all' || assignment.type === typeFilter)
+  // Sort and filter assignments
+  const filteredAssignments = [...dataAssignments]
+    .filter(assignment => {
+      const matchesSearch = searchTerm === '' || 
+        assignment.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignment.assignedEmployee?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignment.requiredStation.some(station => 
+          station.toLowerCase().includes(searchTerm.toLowerCase())
+        ) ||
+        assignment.type.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesSearch;
+    })
     .sort((a, b) => a.time.localeCompare(b.time));
 
-  const assignedCount = sortedAssignments.filter(a => a.status === 'assigned').length;
-  const totalCount = sortedAssignments.length;
+  const assignedCount = filteredAssignments.filter(a => a.status === 'assigned').length;
+  const totalCount = filteredAssignments.length;
 
   return (
     <div
@@ -461,20 +174,21 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
       aria-modal="true"
       aria-labelledby="shift-assignment-panel-title"
     >
-      {/* Main Content Area */}
+      {/* ==================== MAIN CONTENT AREA ==================== */}
       <div
         className={`${
           showAISuggestionPanel ? 'w-2/3' : 'w-full'
-        } flex flex-col bg-background p-8 overflow-y-auto relative transition-all duration-300 shadow-lg`}
+        } flex flex-col bg-background p-4 md:p-8 overflow-y-auto relative transition-all duration-300 shadow-lg`}
       >
-        <header className="flex items-center justify-between mb-8 border-b border-muted pb-4">
+        {/* ==================== HEADER ==================== */}
+        <header className="flex items-center justify-between mb-4 md:mb-8 border-b border-muted pb-4">
           <h2
             id="shift-assignment-panel-title"
-            className="text-3xl font-semibold flex items-center gap-3 text-blue-700"
+            className="text-xl md:text-3xl font-semibold flex items-center gap-2 md:gap-3 text-blue-700"
           >
-            <Users className="w-7 h-7" aria-hidden="true" />
-            Daily Shift Assignments -{' '}
-            <time dateTime={date} className="ml-2 font-mono text-lg text-muted-foreground">
+            <Users className="w-5 h-5 md:w-7 md:h-7" aria-hidden="true" />
+            <span className="hidden sm:inline">Daily Shift Assignments - </span>
+            <time dateTime={date} className="font-mono text-sm md:text-lg text-muted-foreground">
               {new Date(date).toLocaleDateString(undefined, {
                 weekday: 'long',
                 year: 'numeric',
@@ -488,66 +202,29 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
             aria-label="Close shift assignment panel"
             className="text-muted-foreground hover:text-foreground transition rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5 md:w-6 md:h-6" />
           </button>
         </header>
 
-        <div className="space-y-6 flex-1 overflow-y-auto">
-          {/* Action Buttons */}
-          <section
-            className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border"
-            aria-labelledby="action-buttons-heading"
-          >
-            <div className="flex items-center gap-4">
-              <Button
-                onClick={() => setShowAddDialog(true)}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                aria-label="Add new shift"
-              >
-                <Plus className="w-4 h-4" aria-hidden="true" />
-                Add Shift
-              </Button>
+        {/* ==================== MAIN CONTENT ==================== */}
+        <div className="space-y-4 md:space-y-6 flex-1 overflow-y-auto">
+          {/* ==================== ACTION BUTTONS ==================== */}
+          {!viewMode && (
+            <AssignmentActions
+              viewMode={viewMode}
+              isAutoAssigning={isAutoAssigning}
+              assignedCount={assignedCount}
+              totalCount={totalCount}
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              onAddShift={() => setShowAddDialog(true)}
+              onAutoAssign={handleAutoAssign}
+            />
+          )}
 
-              <Button
-                onClick={handleAutoAssign}
-                disabled={isAutoAssigning}
-                variant="outline"
-                className="flex items-center gap-2 border-purple-300 hover:bg-purple-50 hover:border-purple-400"
-                aria-label={isAutoAssigning ? 'Auto-assigning shifts' : 'Auto-assign shifts'}
-              >
-                {isAutoAssigning ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Zap className="w-4 h-4" aria-hidden="true" />
-                )}
-                {isAutoAssigning ? 'Auto-Assigning...' : 'Auto-Assign'}
-              </Button>
-
-              <div
-                className="flex items-center gap-2 px-3 py-1 bg-white rounded-full border shadow-sm"
-                role="status"
-                aria-label={`Assignment progress: ${assignedCount} of ${totalCount} shifts assigned`}
-              >
-                <Users className="w-4 h-4 text-blue-600" aria-hidden="true" />
-                <span className="text-sm font-medium">
-                  {assignedCount}/{totalCount} Assigned
-                </span>
-                <div
-                  className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden"
-                  role="progressbar"
-                  aria-valuenow={assignedCount}
-                  aria-valuemax={totalCount}
-                >
-                  <div
-                    className="h-full bg-green-500 transition-all duration-300"
-                    style={{ width: `${totalCount > 0 ? (assignedCount / totalCount) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
-
-
-
-              {/* Type Filter */}
+          {/* ==================== TYPE FILTER FOR VIEW MODE ==================== */}
+          {viewMode && (
+            <section className="flex items-center justify-end p-4 bg-muted/30 rounded-lg border">
               <div className="flex items-center gap-2">
                 <Label htmlFor="type-filter" className="text-sm font-medium">
                   Type:
@@ -565,188 +242,45 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
                   </SelectContent>
                 </Select>
               </div>
-            </div>
+            </section>
+          )}
 
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                className="px-6 hover:bg-gray-50"
-                aria-label="Cancel and close panel"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveSchedule}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white shadow-sm px-6"
-                aria-label="Save final schedule"
-              >
-                <Save className="w-4 h-4" aria-hidden="true" />
-                Save Schedule
-              </Button>
-            </div>
-          </section>
-
-          {/* Shift Assignments Table */}
-          <div className="border rounded-lg overflow-hidden shadow-sm">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow className="hover:bg-muted/50">
-                  <TableHead className="font-semibold text-foreground">Required Station(s)</TableHead>
-                  <TableHead className="font-semibold text-foreground">Time In and Out</TableHead>
-                  <TableHead className="font-semibold text-foreground">Type</TableHead>
-                  <TableHead className="font-semibold text-foreground">Assigned Employee</TableHead>
-                  <TableHead className="font-semibold text-foreground">Status</TableHead>
-                  <TableHead className="font-semibold text-foreground">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedAssignments.map((assignment, index) => {
-                  const availableEmployees = getAvailableEmployees(assignment);
-                  const isEvenRow = index % 2 === 0;
-                  return (
-                    <TableRow
-                      key={assignment.id}
-                      className={`
-                        ${isEvenRow ? 'bg-background' : 'bg-muted/20'}
-                        ${assignment.status === 'assigned' ? 'bg-green-50/50 hover:bg-green-100/50' : 'hover:bg-muted/30'}
-                        transition-colors duration-150
-                      `}
-                    >
-                      <TableCell className="py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {assignment.requiredStation.map((station, idx) => (
-                            <Badge key={idx} variant="secondary" className="text-xs">
-                              {station.replace(/\b\w/g, l => l.toUpperCase())}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium flex items-center gap-2 py-4">
-                        <Clock className="w-4 h-4 text-blue-600" />
-                        <span className="text-sm font-mono">
-                          In: {assignment.time} Out: {assignment.endTime}
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-4">
-                        <Badge variant="outline" className="capitalize">
-                          {assignment.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {assignment.assignedEmployee ? (
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium">{assignment.assignedEmployee.name}</p>
-                              <p className="text-sm text-muted-foreground">{assignment.assignedEmployee.role}</p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleUnassignEmployee(assignment.id)}
-                              title="Unassign employee"
-                            >
-                              <UserMinus className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <Button
-                              onClick={() => handleOpenAISuggestionPanel(assignment.id)}
-                              variant="outline"
-                              className="w-full flex items-center gap-2"
-                              disabled={availableEmployees.length === 0}
-                            >
-                              <Users className="w-4 h-4" />
-                              Assign Employee
-                            </Button>
-                            {availableEmployees.length === 0 && (
-                              <p className="text-xs text-muted-foreground">
-                                No available employees
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-4">
-                        <Badge
-                          variant={assignment.status === 'assigned' ? 'default' : assignment.status === 'conflict' ? 'destructive' : 'secondary'}
-                          className={`flex items-center gap-1 ${
-                            assignment.status === 'assigned' ? 'bg-green-600 hover:bg-green-700' :
-                            assignment.status === 'conflict' ? 'bg-red-600 hover:bg-red-700' :
-                            'bg-gray-500 hover:bg-gray-600'
-                          }`}
-                        >
-                          {assignment.status === 'assigned' && <Check className="w-3 h-3" />}
-                          {assignment.status === 'conflict' && <X className="w-3 h-3" />}
-                          {assignment.status.charAt(0).toUpperCase() + assignment.status.slice(1)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="py-4">
-                        <div className="flex gap-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditShift(assignment)}
-                                className="hover:bg-blue-50 hover:text-blue-600"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Edit shift details</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteShift(assignment.id)}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Delete shift</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          {/* ==================== SHIFT ASSIGNMENTS TABLE ==================== */}
+          <ShiftAssignmentTable
+            assignments={filteredAssignments}
+            onAssignEmployee={handleAssignEmployee}
+            onUnassignEmployee={(shiftId) => updateAssignment(date, shiftId, null)}
+            onEditShift={handleEditShift}
+            onDeleteShift={handleDeleteShift}
+            onOpenAISuggestionPanel={handleOpenAISuggestionPanel}
+            viewMode={viewMode}
+          />
         </div>
       </div>
 
-      {/* Right Side AI Suggestion Panel */}
+      {/* ==================== RIGHT SIDE AI SUGGESTION PANEL ==================== */}
       {showAISuggestionPanel && selectedShiftForAI && (
         <div className="w-1/3 bg-background border-l border-border flex flex-col overflow-hidden">
           <AISuggestionsPanel
             isOpen={showAISuggestionPanel}
             onClose={handleCloseAISuggestionPanel}
             shiftId={selectedShiftForAI}
-            shiftTitle={assignments.find(a => a.id === selectedShiftForAI)?.title || ''}
-            shiftTime={assignments.find(a => a.id === selectedShiftForAI)?.time || ''}
-            shiftEndTime={assignments.find(a => a.id === selectedShiftForAI)?.endTime || ''}
+            shiftTitle={dataAssignments.find(a => a.id === selectedShiftForAI)?.title || ''}
+            shiftTime={dataAssignments.find(a => a.id === selectedShiftForAI)?.time || ''}
+            shiftEndTime={dataAssignments.find(a => a.id === selectedShiftForAI)?.endTime || ''}
             shiftDate={date}
-            department={assignments.find(a => a.id === selectedShiftForAI)?.department || ''}
-            requiredStations={assignments.find(a => a.id === selectedShiftForAI)?.requiredStation || []}
-            availableEmployees={getAvailableEmployees(assignments.find(a => a.id === selectedShiftForAI)!)}
+            department={dataAssignments.find(a => a.id === selectedShiftForAI)?.department || ''}
+            requiredStations={dataAssignments.find(a => a.id === selectedShiftForAI)?.requiredStation || []}
+            availableEmployees={employees} // Pass all employees - filtering will be done in QuickAssignSection
             employees={employees}
             onApplySuggestion={handleApplyAISuggestion}
             mode="panel"
+            employeeCurrentHours={employeeCurrentHours}
           />
         </div>
       )}
 
-      {/* Edit Shift Dialog */}
+      {/* ==================== DIALOGS ==================== */}
       <EditShiftDialog
         isOpen={!!editingShift}
         onClose={handleCloseEditDialog}
@@ -755,94 +289,15 @@ const ShiftAssignmentPanel: React.FC<ShiftAssignmentPanelProps> = ({
         onSave={handleSaveEdit}
       />
 
-      {/* Add Shift Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Add New Shift</DialogTitle>
-            <DialogDescription>
-              Create a new shift assignment for the selected date.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="time" className="text-right">
-                Time
-              </Label>
-              <Input
-                id="time"
-                type="time"
-                value={newShiftForm.time}
-                onChange={(e) => setNewShiftForm(prev => ({ ...prev, time: e.target.value }))}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="title" className="text-right">
-                Title
-              </Label>
-              <Input
-                id="title"
-                value={newShiftForm.title}
-                onChange={(e) => setNewShiftForm(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="e.g., Morning Shift"
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="department" className="text-right">
-                Department
-              </Label>
-              <Select
-                value={newShiftForm.department}
-                onValueChange={(value) => setNewShiftForm(prev => ({ ...prev, department: value }))}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map(dept => (
-                    <SelectItem key={dept.id} value={dept.name}>
-                      {dept.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">
-                Stations
-              </Label>
-              <div className="col-span-3 space-y-2">
-                {departments
-                  .find(dept => dept.name === newShiftForm.department)
-                  ?.stations.map(station => (
-                    <div key={station.id} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id={station.id}
-                        checked={newShiftForm.requiredStation.includes(station.name)}
-                        onChange={() => handleStationToggle(station.name)}
-                        className="rounded"
-                      />
-                      <Label htmlFor={station.id} className="text-sm">
-                        {station.name}
-                      </Label>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddShift}>
-              Add Shift
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <AddShiftDialog
+        isOpen={showAddDialog}
+        onClose={() => setShowAddDialog(false)}
+        newShiftForm={newShiftForm}
+        onFormChange={handleFormChange}
+        departments={departments}
+        onStationToggle={handleStationToggle}
+        onAddShift={handleAddShift}
+      />
     </div>
   );
 };

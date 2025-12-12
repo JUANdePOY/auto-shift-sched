@@ -176,7 +176,7 @@ export function TemporaryWeeklyScheduleView({
           {onSaveWeeklySchedule && (
             <Button
               onClick={async () => {
-                const success = await saveWeeklySchedule();
+                const success = await saveWeeklySchedule(weekDates);
                 if (success) {
                   onSaveWeeklySchedule();
                 }

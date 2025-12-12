@@ -212,11 +212,6 @@ export function Employees() {
               <span className="font-medium text-gray-700">{Math.round(employees.length > 0 ? employees.reduce((sum, emp) => sum + emp.currentWeeklyHours, 0) / employees.length : 0)}h</span>
               <span className="text-gray-500">Avg Hours</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-              <span className="font-medium text-gray-700">{Math.round(employees.length > 0 ? employees.reduce((sum, emp) => sum + (emp.currentWeeklyHours / emp.maxHoursPerWeek), 0) / employees.length * 100 : 0)}%</span>
-              <span className="text-gray-500">Utilization</span>
-            </div>
           </div>
         </div>
       </div>

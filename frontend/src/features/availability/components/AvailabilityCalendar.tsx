@@ -36,6 +36,15 @@ const timeSlots = [
   '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'
 ];
 
+const formatTimeToAMPM = (time: string) => {
+  if (!time) return time;
+  const [hours, minutes] = time.split(':');
+  const hour = parseInt(hours);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return `${displayHour}:${minutes} ${ampm}`;
+};
+
 const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
   employeeId,
   employeeName,
@@ -238,7 +247,7 @@ const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
                         >
                           <option value="">Any time</option>
                           {timeSlots.map(time => (
-                            <option key={time} value={time}>{time}</option>
+                            <option key={time} value={time}>{formatTimeToAMPM(time)}</option>
                           ))}
                         </select>
                       </div>
@@ -258,7 +267,7 @@ const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
                         >
                           <option value="">Any time</option>
                           {timeSlots.map(time => (
-                            <option key={time} value={time}>{time}</option>
+                            <option key={time} value={time}>{formatTimeToAMPM(time)}</option>
                           ))}
                         </select>
                       </div>

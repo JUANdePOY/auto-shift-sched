@@ -11,16 +11,16 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 // Login endpoint
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { name, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
+    if (!name || !password) {
+      return res.status(400).json({ message: 'Name and password are required' });
     }
 
     // Query database for user
     const [users] = await db.execute(
-      'SELECT id, name, email, password, role, department, position FROM employees WHERE email = ?',
-      [email]
+      'SELECT id, name, email, password, role, department, position FROM employees WHERE name = ?',
+      [name]
     );
 
     if (users.length === 0) {

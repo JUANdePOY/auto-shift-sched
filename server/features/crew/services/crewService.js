@@ -23,7 +23,46 @@ class CrewService {
         throw new Error('Employee not found');
       }
 
-      return rows[0];
+      const profile = rows[0];
+
+      // Parse station data - handle JSON arrays, comma-separated strings, and already parsed arrays
+      if (profile.station) {
+        if (Array.isArray(profile.station)) {
+          // Already parsed by MySQL driver
+          profile.stations = profile.station;
+          delete profile.station;
+        } else if (typeof profile.station === 'string') {
+          try {
+            // First try to parse as JSON
+            const parsedStation = JSON.parse(profile.station);
+            if (Array.isArray(parsedStation)) {
+              profile.stations = parsedStation;
+              delete profile.station; // Remove the old station field
+            } else {
+              profile.stations = [parsedStation]; // Convert single station to array
+              delete profile.station;
+            }
+          } catch (e) {
+            // If JSON parsing fails, treat as comma-separated string
+            if (profile.station.includes(',')) {
+              // Split by comma and trim whitespace
+              profile.stations = profile.station.split(',').map(s => s.trim()).filter(s => s.length > 0);
+            } else {
+              // Single station string
+              profile.stations = [profile.station];
+            }
+            delete profile.station;
+          }
+        } else {
+          // Fallback for other types
+          profile.stations = [String(profile.station)];
+          delete profile.station;
+        }
+      } else {
+        profile.stations = [];
+      }
+
+      return profile;
     } catch (error) {
       console.error('Error in getProfile:', error);
       throw error;

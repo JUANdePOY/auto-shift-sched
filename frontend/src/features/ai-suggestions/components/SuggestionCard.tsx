@@ -66,27 +66,13 @@ export function SuggestionCard({
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {/* Impact Metrics */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center">
-              <p className="text-xs text-muted-foreground">Efficiency</p>
-              <p className="text-blue-600">{suggestion.impact.efficiency}%</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-muted-foreground">Coverage</p>
-              <p className="text-green-600">{suggestion.impact.coverage}%</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-muted-foreground">Satisfaction</p>
-              <p className="text-purple-600">{suggestion.impact.satisfaction}%</p>
-            </div>
-          </div>
-
           {/* Action Details */}
           <div className="p-3 bg-muted/50 rounded-lg">
             <p className="text-sm">
               <span className="capitalize">{suggestion.action.type}</span>{' '}
-              <span className="font-medium">{getEmployeeName(suggestion.action.employeeId)}</span>
+              <span className="font-medium">
+                {suggestion.action.employeeName || getEmployeeName(suggestion.action.employeeId)}
+              </span>
               {suggestion.action.targetEmployeeId && (
                 <>
                   {' with '}
@@ -94,6 +80,20 @@ export function SuggestionCard({
                 </>
               )}
             </p>
+            {/* Display reasons if available */}
+            {suggestion.reasons && suggestion.reasons.length > 0 && (
+              <div className="mt-2">
+                <p className="text-xs text-muted-foreground font-medium">Reasons:</p>
+                <ul className="text-xs text-muted-foreground mt-1 space-y-1">
+                  {suggestion.reasons.map((reason, index) => (
+                    <li key={index} className="flex items-start gap-1">
+                      <span className="text-blue-500">•</span>
+                      <span>{reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

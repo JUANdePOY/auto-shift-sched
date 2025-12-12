@@ -21,13 +21,36 @@ class StationManager {
   hasRequiredSkills(employee, requiredStations) {
     if (!requiredStations || requiredStations.length === 0) return true;
 
-    const employeeStations = Array.isArray(employee.station)
-      ? employee.station
-      : [employee.station].filter(Boolean);
+    // Get employee stations as array of strings
+    let employeeStations = [];
+    if (Array.isArray(employee.station)) {
+      employeeStations = employee.station.flat().map(station => {
+        if (typeof station === 'string') {
+          return station.trim().toLowerCase();
+        }
+        if (typeof station === 'object' && station !== null && 'name' in station) {
+          return typeof station.name === 'string' ? station.name.trim().toLowerCase() : '';
+        }
+        return String(station).trim().toLowerCase();
+      });
+    } else if (typeof employee.station === 'string') {
+      employeeStations = employee.station.split(',').map(s => s.trim().toLowerCase());
+    } else {
+      employeeStations = String(employee.station || '').split(',').map(s => s.trim().toLowerCase());
+    }
 
-    return requiredStations.every(requiredStation =>
+    // Remove empty strings
+    employeeStations = employeeStations.filter(s => s !== '');
+
+    // Clean up required stations
+    const trimmedRequiredStations = requiredStations
+      .filter(s => s != null && s !== '')
+      .map(s => s.trim().toLowerCase());
+
+    // Check for matches
+    return trimmedRequiredStations.every(required =>
       employeeStations.some(empStation =>
-        this.normalizeStationName(empStation) === this.normalizeStationName(requiredStation)
+        this.normalizeStationName(empStation) === this.normalizeStationName(required)
       )
     );
   }
@@ -282,6 +305,47 @@ class StationManager {
     });
 
     return recommendations;
+  }
+
+  /**
+   * Get detailed skill breakdown for an employee
+   * @param {Object} employee - Employee object
+   * @param {Array} requiredStations - Required stations for context
+   * @returns {Object} Detailed skill information
+   */
+  getDetailedSkillBreakdown(employee, requiredStations = []) {
+    const employeeStations = Array.isArray(employee.station)
+      ? employee.station
+      : [employee.station].filter(Boolean);
+
+    const breakdown = {
+      primary: [],
+      secondary: [],
+      trained: [],
+      crossTrain: [],
+      missing: []
+    };
+
+    // For now, assume all employee stations are primary skills
+    // In a real implementation, this would come from employee skill data
+    employeeStations.forEach(station => {
+      const normalizedStation = this.normalizeStationName(station);
+      breakdown.primary.push(normalizedStation);
+    });
+
+    // Check required stations against employee skills
+    requiredStations.forEach(requiredStation => {
+      const normalizedRequired = this.normalizeStationName(requiredStation);
+      const hasSkill = employeeStations.some(empStation =>
+        this.normalizeStationName(empStation) === normalizedRequired
+      );
+
+      if (!hasSkill) {
+        breakdown.missing.push(normalizedRequired);
+      }
+    });
+
+    return breakdown;
   }
 
   /**

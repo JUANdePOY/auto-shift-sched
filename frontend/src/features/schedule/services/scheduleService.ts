@@ -204,9 +204,10 @@ export async function generateAutomatedSchedule(startDate: string, endDate: stri
 /**
  * Get AI suggestions for employees to assign to a shift
  * @param shiftId The ID of the shift
+ * @param date The date for the shift assignment (YYYY-MM-DD)
  * @returns A promise that resolves to an array of employee suggestions
  */
-export async function getEmployeeSuggestions(shiftId: string): Promise<Array<{
+export async function getEmployeeSuggestions(shiftId: string, date: string): Promise<Array<{
   employee: Employee;
   score: number;
   reasons: string[];
@@ -216,7 +217,7 @@ export async function getEmployeeSuggestions(shiftId: string): Promise<Array<{
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ shiftId }),
+    body: JSON.stringify({ shiftId, date }),
   });
 
   if (!response.ok) {
@@ -226,15 +227,49 @@ export async function getEmployeeSuggestions(shiftId: string): Promise<Array<{
 }
 
 /**
+ * Get top 3 unassigned employee suggestions for a shift
+ * @param shiftId The ID of the shift
+ * @param date The date for the shift assignment (YYYY-MM-DD)
+ * @returns A promise that resolves to an array of top 3 unassigned employee suggestions
+ */
+export async function getTopUnassignedSuggestions(shiftId: string, date: string): Promise<Array<{
+  employee: Employee;
+  score: number;
+  reasons: string[];
+}>> {
+  const response = await fetch(`${API_URL}/schedule/suggest-unassigned`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ shiftId, date }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to get unassigned employee suggestions');
+  }
+  return response.json();
+}
+
+/**
  * Save final schedule for a day with all assignments
  * @param date The date for the schedule in YYYY-MM-DD format
- * @param assignments Array of assignments with shiftId and employeeId
+ * @param assignments Array of assignments with shiftId, employeeId and additional details
  * @param notes Optional notes for the schedule
  * @returns A promise that resolves to the save result
  */
 export async function saveFinalSchedule(
   date: string,
-  assignments: Array<{ shiftId: string; employeeId: string }>,
+  assignments: Array<{
+    shiftId: string;
+    employeeId: string;
+    employeeName?: string;
+    shiftTitle?: string;
+    timeIn?: string | null;
+    timeOut?: string | null;
+    department?: string;
+    requiredStations?: string[];
+  }>,
   notes?: string
 ): Promise<{
   success: boolean;

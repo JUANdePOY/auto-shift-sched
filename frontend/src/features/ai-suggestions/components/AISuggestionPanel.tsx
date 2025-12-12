@@ -73,8 +73,28 @@ export function AISuggestionsPanel({
   };
 
   const handleQuickAssignWrapper = (employeeId: string) => {
+    const employee = availableEmployees.find(emp => emp.id === employeeId);
+    if (employee && shiftId && onApplySuggestion) {
+      const quickSuggestion: AISuggestion = {
+        id: `quick-assign-${shiftId}-${employeeId}`,
+        type: 'assignment',
+        title: `Quick Assign: ${employee.name}`,
+        description: `Direct assignment of ${employee.name} to this shift.`,
+        confidence: 90,
+        impact: {
+          efficiency: 20,
+          satisfaction: 15,
+          coverage: 25
+        },
+        action: {
+          type: 'assign',
+          shiftId: shiftId,
+          employeeId: employeeId
+        }
+      };
+      onApplySuggestion(quickSuggestion);
+    }
     handleQuickAssign(employeeId);
-    // You might want to trigger onApplySuggestion here as well if needed
   };
 
   // Panel mode - compact view

@@ -3,7 +3,7 @@ import type { AvailabilitySubmission, AvailabilityStatus, AvailabilityHistory, A
 const API_BASE_URL = '/api/availability';
 
 const getAuthHeaders = (): HeadersInit => {
-  const token = localStorage.getItem('authToken');
+  const token = sessionStorage.getItem('authToken');
   return {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),

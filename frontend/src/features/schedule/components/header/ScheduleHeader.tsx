@@ -9,6 +9,7 @@ interface ScheduleHeaderProps {
   onCreateWeeklySchedule?: () => void;
   isWeeklyScheduleMode?: boolean;
   onBackToSchedule?: () => void;
+  isReadOnly?: boolean;
 }
 
 export function ScheduleHeader({
@@ -18,7 +19,8 @@ export function ScheduleHeader({
   onCreateSchedule,
   onCreateWeeklySchedule,
   isWeeklyScheduleMode = false,
-  onBackToSchedule
+  onBackToSchedule,
+  isReadOnly = false
 }: ScheduleHeaderProps) {
   return (
     <div className={`flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-4 rounded-lg border ${isWeeklyScheduleMode ? 'bg-gradient-to-r from-red-50 to-red-100 border-red-200' : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100'}`}>
@@ -44,13 +46,15 @@ export function ScheduleHeader({
             Back to Schedule
           </Button>
         )}
-        <Button
-          onClick={onCreateWeeklySchedule || (() => onCreateSchedule(formatDateToString(currentWeek)))}
-          className={`h-10 px-4 text-white shadow-sm ${isWeeklyScheduleMode ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          {onCreateWeeklySchedule ? 'Create Weekly Schedule' : 'Create Schedule'}
-        </Button>
+        {!isReadOnly && (
+          <Button
+            onClick={onCreateWeeklySchedule || (() => onCreateSchedule(formatDateToString(currentWeek)))}
+            className={`h-10 px-4 text-white shadow-sm ${isWeeklyScheduleMode ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {onCreateWeeklySchedule ? 'Create Weekly Schedule' : 'Create Schedule'}
+          </Button>
+        )}
 
         <Button
           onClick={() => {

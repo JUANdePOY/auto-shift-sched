@@ -90,8 +90,6 @@ export function EmployeeList({
               <SelectContent>
                 <SelectItem value="name">Name</SelectItem>
                 <SelectItem value="department">Department</SelectItem>
-                <SelectItem value="hours">Hours</SelectItem>
-                <SelectItem value="utilization">Utilization</SelectItem>
               </SelectContent>
             </Select>
 
@@ -109,6 +107,7 @@ export function EmployeeList({
               employee={employee}
               onEdit={onEditEmployee}
               onDelete={onDeleteEmployee}
+              // Removed active/Utilization features
             />
           ))}
 

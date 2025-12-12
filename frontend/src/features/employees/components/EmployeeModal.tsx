@@ -31,22 +31,14 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
   const [selectedStations, setSelectedStations] = useState<string[]>([]);
   const [maxHoursPerWeek, setMaxHoursPerWeek] = useState(40);
   const [currentWeeklyHours, setCurrentWeeklyHours] = useState(0);
-  const [availability, setAvailability] = useState<WeeklyAvailability>({
-    monday: { available: true },
-    tuesday: { available: true },
-    wednesday: { available: true },
-    thursday: { available: true },
-    friday: { available: true },
-    saturday: { available: true },
-    sunday: { available: true }
-  });
+  const [availability, setAvailability] = useState<WeeklyAvailability | undefined>(undefined);
 
   useEffect(() => {
-    if (initialData) {
-      setName(initialData.name);
-      setEmail(initialData.email);
+    if (initialData && isOpen) {
+      setName(initialData.name || '');
+      setEmail(initialData.email || '');
       setPassword(''); // Don't populate password for editing
-      setDepartment(initialData.department);
+      setDepartment(initialData.department || 'Service');
       if (Array.isArray(initialData.station)) {
         setSelectedStations(initialData.station);
       } else if (initialData.station) {
@@ -54,10 +46,10 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
       } else {
         setSelectedStations([]);
       }
-      setMaxHoursPerWeek(initialData.maxHoursPerWeek);
-      setCurrentWeeklyHours(initialData.currentWeeklyHours);
+      setMaxHoursPerWeek(initialData.maxHoursPerWeek || 40);
+      setCurrentWeeklyHours(initialData.currentWeeklyHours || 0);
       setAvailability(initialData.availability);
-    } else {
+    } else if (!initialData && isOpen) {
       setName('');
       setEmail('');
       setPassword(''); // Will be set to name when creating
@@ -65,15 +57,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
       setSelectedStations([]);
       setMaxHoursPerWeek(40);
       setCurrentWeeklyHours(0);
-      setAvailability({
-        monday: { available: true },
-        tuesday: { available: true },
-        wednesday: { available: true },
-        thursday: { available: true },
-        friday: { available: true },
-        saturday: { available: true },
-        sunday: { available: true }
-      });
+      setAvailability(undefined);
     }
   }, [initialData, isOpen]);
 
@@ -87,7 +71,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
         station: selectedStations,
         maxHoursPerWeek,
         currentWeeklyHours,
-        availability
+        availability: availability || {}
       };
       await onSubmit(employeeData);
       onClose();
@@ -120,6 +104,8 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
             <Label htmlFor="name" className="text-right">Name</Label>
             <Input
               id="name"
+              name="name"
+              autoComplete="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="col-span-3"
@@ -130,7 +116,9 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
             <Label htmlFor="email" className="text-right">Email</Label>
             <Input
               id="email"
+              name="email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="col-span-3"
@@ -142,7 +130,9 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
               <Label htmlFor="password" className="text-right">Password</Label>
               <Input
                 id="password"
+                name="password"
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Leave blank to use name as password"
@@ -153,8 +143,11 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
 
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="department" className="text-right">Department</Label>
-            <Select value={department} onValueChange={(value) => setDepartment(value as 'Service' | 'Production')}>
-              <SelectTrigger className="col-span-3">
+            <Select value={department} onValueChange={(value) => {
+              setDepartment(value as 'Service' | 'Production');
+              setSelectedStations([]); // Clear stations when department changes
+            }}>
+              <SelectTrigger id="department" name="department" className="col-span-3">
                 <SelectValue placeholder="Select Department" />
               </SelectTrigger>
               <SelectContent>
@@ -170,22 +163,26 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
             <div className="col-span-3 space-y-2 max-h-40 overflow-y-auto">
               {(() => {
                 const selectedDept = departments.find(dept => dept.name === department);
-                const deptId = selectedDept ? selectedDept.id : '';
+                if (!selectedDept) return <div className="text-sm text-gray-500">Select a department first</div>;
                 
-                return stations
-                  .filter(station => station.departmentId === deptId)
-                  .map(station => (
-                    <div key={station.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`station-${station.id}`}
-                        checked={selectedStations.includes(station.name)}
-                        onCheckedChange={(checked) => handleStationChange(station.name, checked as boolean)}
-                      />
-                      <Label htmlFor={`station-${station.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        {station.name}
-                      </Label>
-                    </div>
-                  ));
+                const deptStations = selectedDept.stations || [];
+                
+                if (deptStations.length === 0) {
+                  return <div className="text-sm text-gray-500">No stations available for this department</div>;
+                }
+                
+                return deptStations.map(station => (
+                  <div key={station.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`station-${station.id}`}
+                      checked={selectedStations.includes(station.name)}
+                      onCheckedChange={(checked) => handleStationChange(station.name, checked as boolean)}
+                    />
+                    <Label htmlFor={`station-${station.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      {station.name}
+                    </Label>
+                  </div>
+                ));
               })()}
             </div>
           </div>
@@ -194,6 +191,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
             <Label htmlFor="maxHours" className="text-right">Max Hours/Week</Label>
             <Input
               id="maxHours"
+              name="maxHours"
               type="number"
               value={maxHoursPerWeek}
               onChange={(e) => setMaxHoursPerWeek(Number(e.target.value))}

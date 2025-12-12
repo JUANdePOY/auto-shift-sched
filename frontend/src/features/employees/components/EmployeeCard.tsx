@@ -1,6 +1,5 @@
 import { Card, CardContent } from '../../shared/components/ui/card';
 import { Badge } from '../../shared/components/ui/badge';
-import { Progress } from '../../shared/components/ui/progress';
 import { Avatar, AvatarFallback, AvatarImage } from '../../shared/components/ui/avatar';
 import { Mail, Edit, Trash2 } from 'lucide-react';
 import {
@@ -18,16 +17,25 @@ interface EmployeeCardProps {
 
 export function EmployeeCard({ employee, onEdit, onDelete }: EmployeeCardProps) {
   const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+    return name.split('   ').map(n => n[0]).join('').toUpperCase();
   };
 
-  const getUtilizationColor = (utilization: number) => {
-    if (utilization >= 90) return 'text-red-600';
-    if (utilization >= 75) return 'text-yellow-600';
-    return 'text-green-600';
-  };
+  const stations = (() => {
+    if (Array.isArray(employee.station)) {
+      // Handle nested array structure [[stations]]
+      if (employee.station.length === 1 && Array.isArray(employee.station[0])) {
+        return employee.station[0];
+      }
+      return employee.station;
+    }
+    
+    if (typeof employee.station === 'string' && employee.station.length > 0) {
+      return employee.station.split(/(?=[A-Z])/).filter(s => s.length > 0);
+    }
+    
+    return [];
+  })();
 
-  const utilization = (employee.currentWeeklyHours / employee.maxHoursPerWeek) * 100;
 
   return (
     <HoverCard>
@@ -43,22 +51,24 @@ export function EmployeeCard({ employee, onEdit, onDelete }: EmployeeCardProps) 
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-gray-900 truncate">{employee.name}</h3>
                   <p className="text-sm text-gray-600 truncate">{employee.department}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className={`w-2 h-2 rounded-full ${employee.currentWeeklyHours > 0 ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                    <span className="text-xs text-gray-500">
-                      {employee.currentWeeklyHours > 0 ? `${employee.currentWeeklyHours}h this week` : 'No hours scheduled'}
-                    </span>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {stations.length === 0 ? (
+                      <Badge variant="secondary" className="text-xs">Unassigned</Badge>
+                    ) : (
+                      stations.map((station, i) => (
+                        <Badge key={`${station}-${i}`} className="text-xs px-2 py-1 rounded-full border bg-blue-100 text-blue-800 border-blue-200" title={station}>
+                          {station}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+                  <div className="mt-1">
                   </div>
                 </div>
               </div>
 
               <div className="flex flex-col items-end gap-1">
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">Utilization</p>
-                  <p className={`text-sm font-semibold ${getUtilizationColor(utilization)}`}>
-                    {Math.round(utilization)}%
-                  </p>
-                </div>
+                
                 <div className="flex gap-1">
                   <button
                     onClick={(e) => {
@@ -86,7 +96,7 @@ export function EmployeeCard({ employee, onEdit, onDelete }: EmployeeCardProps) 
           </CardContent>
         </Card>
       </HoverCardTrigger>
-      <HoverCardContent className="w-80">
+      <HoverCardContent className="w-96">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <Avatar className="w-12 h-12">
@@ -104,43 +114,20 @@ export function EmployeeCard({ employee, onEdit, onDelete }: EmployeeCardProps) 
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* Station */}
+            {/* Station (compact chips + overflow) */}
             <div>
               <p className="text-xs text-muted-foreground mb-1">Station</p>
-              <div className="flex gap-1 flex-wrap">
-                {Array.isArray(employee.station)
-                  ? employee.station.map((station, index) => (
-                      <Badge key={index} variant="secondary" className="text-xs">{station}</Badge>
-                    ))
-                  : employee.station
-                    ? <Badge variant="secondary" className="text-xs">{employee.station}</Badge>
-                    : <Badge variant="secondary" className="text-xs">Unassigned</Badge>}
+              <div className="flex flex-wrap gap-2">
+                {stations.length === 0 ? (
+                  <Badge variant="secondary" className="text-xs">Unassigned</Badge>
+                ) : (
+                  stations.map((station, i) => (
+                    <Badge key={`${station}-${i}`} className="text-xs px-2 py-1 rounded-full border bg-blue-100 text-blue-800 border-blue-200" title={station}>
+                      {station}
+                    </Badge>
+                  ))
+                )}
               </div>
-            </div>
-
-            {/* Utilization */}
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Utilization</p>
-              <p className={`text-sm font-medium ${getUtilizationColor(utilization)}`}>
-                {Math.round(utilization)}%
-              </p>
-              <Progress value={utilization} className="h-1 w-full mt-1" />
-            </div>
-
-            {/* Hours */}
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Hours</p>
-              <p className="text-sm">
-                {employee.currentWeeklyHours}/{employee.maxHoursPerWeek}h
-              </p>
-            </div>
-
-            {/* Availability */}
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Available Days</p>
-              <p className="text-sm">
-                {employee.availability ? Object.values(employee.availability).filter(day => day.available).length : 0}/7
-              </p>
             </div>
           </div>
 

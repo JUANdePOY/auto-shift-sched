@@ -5,7 +5,7 @@ const API_BASE_URL = '/api/crew';
 
 class CrewService {
   private getAuthHeaders(): HeadersInit {
-    const token = localStorage.getItem('authToken');
+    const token = sessionStorage.getItem('authToken');
     return {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { authService } from '../services/authService';
 import type { User, AuthState, LoginCredentials } from '../types';
 
@@ -121,8 +122,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     try {
       await authService.logout();
-    } catch (error) {
-      console.error('Logout error:', error);
+    } catch {
+      // Error handled in authService
     } finally {
       dispatch({ type: 'LOGOUT' });
     }
@@ -138,7 +139,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else {
         dispatch({ type: 'LOGOUT' });
       }
-    } catch (error) {
+    } catch {
       dispatch({ type: 'SET_LOADING', payload: false });
       dispatch({ type: 'SET_ERROR', payload: 'Failed to refresh user data' });
     }

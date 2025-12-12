@@ -92,17 +92,45 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
   const currentAvailability = localAvailability || availability;
   const isSubmitted = availability && availability.submittedAt;
 
+  const getWeekOfMonth = (date: Date) => {
+    const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    const firstMonday = new Date(firstDayOfMonth);
+    const dayOfWeek = firstDayOfMonth.getDay();
+    const daysToMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+    firstMonday.setDate(firstDayOfMonth.getDate() + daysToMonday);
+    
+    const diffTime = date.getTime() - firstMonday.getTime();
+    const diffWeeks = Math.floor(diffTime / (7 * 24 * 60 * 60 * 1000));
+    return Math.max(1, diffWeeks + 1);
+  };
+
   const getNextWeeks = () => {
     const weeks = [];
     for (let i = 0; i < 4; i++) {
-      const date = new Date(selectedWeek);
-      date.setDate(date.getDate() + (i * 7));
+      const startDate = new Date(selectedWeek);
+      startDate.setDate(startDate.getDate() + (i * 7));
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+      
+      const weekOfMonth = getWeekOfMonth(startDate);
+      const monthName = startDate.toLocaleDateString('en-US', { month: 'long' });
+      
       weeks.push({
-        start: date.toISOString().split('T')[0],
-        label: `Week of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+        start: startDate.toISOString().split('T')[0],
+        label: `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+        weekNumber: weekOfMonth,
+        monthName: monthName
       });
     }
     return weeks;
+  };
+
+  const getDateForDay = (dayName: string) => {
+    const dayIndex = daysOfWeek.indexOf(dayName);
+    const weekStart = new Date(selectedWeek);
+    const dayDate = new Date(weekStart);
+    dayDate.setDate(weekStart.getDate() + dayIndex);
+    return dayDate;
   };
 
   const goToPreviousWeek = () => {
@@ -120,137 +148,192 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2>My Availability</h2>
-          <p className="text-muted-foreground">
-            Submit your availability for upcoming weeks
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="max-w-4xl mx-auto space-y-8">
+      {/* Status Badges */}
+      {(availabilityStatus?.isLocked || isSubmitted) && (
+        <div className="flex items-center justify-center gap-3">
           {availabilityStatus?.isLocked && (
-            <Badge variant="destructive" className="flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" />
-              Locked
+            <Badge variant="destructive" className="flex items-center gap-2 px-3 py-1">
+              <AlertCircle className="w-4 h-4" />
+              Submissions Locked
             </Badge>
           )}
           {isSubmitted && (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
+            <Badge variant="default" className="flex items-center gap-2 px-3 py-1 bg-green-100 text-green-700 border-green-200">
+              <Clock className="w-4 h-4" />
               Submitted {new Date(availability.submittedAt).toLocaleDateString()}
             </Badge>
           )}
         </div>
-      </div>
+      )}
 
       {/* Week Selector */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Select Week</CardTitle>
+      <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50">
+        <CardHeader className="pb-6">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <CalendarDays className="w-6 h-6 text-blue-600" />
+              </div>
+              Week Selection
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button 
+                onClick={goToPreviousWeek} 
+                variant="outline" 
+                size="sm"
+                className="h-10 w-10 p-0 border-2 hover:bg-gray-50"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </Button>
+              <Button 
+                onClick={goToNextWeek} 
+                variant="outline" 
+                size="sm"
+                className="h-10 w-10 p-0 border-2 hover:bg-gray-50"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </Button>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between mb-4">
-            <Button onClick={goToPreviousWeek} variant="outline" size="sm">
-              <ChevronLeft className="w-4 h-4" />
-              Previous Week
-            </Button>
+        <CardContent className="pt-0">
+          {/* Current Week Display */}
+          <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-200 rounded-xl p-6 mb-6">
             <div className="text-center">
-              <p className="text-sm font-medium">
-                Current: Week of {new Date(selectedWeek).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              <p className="text-sm font-medium text-gray-600 mb-2">Currently Selected Week</p>
+              <p className="text-xl font-bold text-gray-900">
+                {(() => {
+                  const startDate = new Date(selectedWeek);
+                  const endDate = new Date(startDate);
+                  endDate.setDate(startDate.getDate() + 6);
+                  return `${startDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+                })()}
               </p>
             </div>
-            <Button onClick={goToNextWeek} variant="outline" size="sm">
-              Next Week
-              <ChevronRight className="w-4 h-4" />
-            </Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-            {getNextWeeks().map((week) => (
-              <Button
-                key={week.start}
-                variant={selectedWeek === week.start ? 'default' : 'outline'}
-                onClick={() => handleWeekChange(week.start)}
-                className="justify-start"
-              >
-                <CalendarDays className="w-4 h-4 mr-2" />
-                {week.label}
-              </Button>
-            ))}
+          
+          {/* Week Options */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900">Available Weeks</h3>
+            <div className="grid gap-3">
+              {getNextWeeks().map((week, index) => {
+                const isSelected = selectedWeek === week.start;
+                return (
+                  <button
+                    key={week.start}
+                    onClick={() => handleWeekChange(week.start)}
+                    className={`w-full p-4 rounded-xl border-2 text-left transition-all duration-200 hover:shadow-md transform hover:scale-[1.02] ${
+                      isSelected 
+                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-500 shadow-lg' 
+                        : 'bg-white hover:bg-gray-50 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className={`font-semibold text-lg ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                          Week {week.weekNumber} - {week.monthName}
+                        </p>
+                        <p className={`text-sm ${isSelected ? 'text-blue-100' : 'text-gray-600'}`}>
+                          {week.label}
+                        </p>
+                      </div>
+                      {isSelected && (
+                        <div className="w-3 h-3 bg-white rounded-full" />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Availability Grid */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Weekly Availability</CardTitle>
-          <CardDescription>
-            Check the days and times you're available to work. Note: 2 RRD (Rest Request Days) are required per week.
+      <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50">
+        <CardHeader className="pb-6">
+          <CardTitle className="text-xl flex items-center gap-3">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <Clock className="w-6 h-6 text-green-600" />
+            </div>
+            Weekly Availability
+          </CardTitle>
+          <CardDescription className="text-base text-gray-600">
+            Select the days and times you're available to work. <span className="font-semibold text-red-600">Note: Exactly 2 RRD (Rest Request Days) are required per week.</span>
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
           {daysOfWeek.map((day) => {
             const dayAvailability = currentAvailability?.preferences[day];
             const isAvailable = dayAvailability?.available || false;
             const requestRestDay = dayAvailability?.requestRestDay || false;
 
             return (
-              <div key={day} className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <Button
-                      variant={isAvailable ? 'default' : 'outline'}
-                      size="sm"
-                      disabled={requestRestDay}
-                      onClick={() =>
-                        handleAvailabilityChange(
-                          day,
-                          !isAvailable,
-                          [],
-                          dayAvailability?.startTime,
-                          dayAvailability?.endTime,
-                          requestRestDay,
-                          dayAvailability?.notes
-                        )
-                      }
-                      className="flex items-center gap-1"
-                    >
-                      <Clock className="w-3 h-3" />
-                      Available
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={requestRestDay}
-                      onClick={() =>
-                        handleAvailabilityChange(
-                          day,
-                          true,
-                          [],
-                          '00:00',
-                          '23:59',
-                          requestRestDay,
-                          dayAvailability?.notes
-                        )
-                      }
-                      className="flex items-center gap-1"
-                    >
-                      <Clock className="w-3 h-3" />
-                      Anytime
-                    </Button>
-                    <label
-                      htmlFor={`${day}-available`}
-                      className="text-sm font-medium capitalize cursor-pointer"
-                    >
-                      {day}
-                    </label>
+              <div key={day} className={`space-y-4 p-6 border-2 rounded-xl transition-all duration-200 ${
+                requestRestDay 
+                  ? 'bg-gradient-to-r from-red-50 to-pink-50 border-red-200' 
+                  : isAvailable 
+                    ? 'bg-gradient-to-r from-green-50 to-blue-50 border-green-200' 
+                    : 'bg-white border-gray-200 hover:border-gray-300'
+              }`}>
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="flex flex-col gap-1">
+                      <h3 className="text-lg font-semibold capitalize text-gray-900">{day}</h3>
+                      <p className="text-sm font-medium text-gray-600">
+                        {getDateForDay(day).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant={isAvailable ? 'default' : 'outline'}
+                        size="default"
+                        disabled={requestRestDay}
+                        onClick={() =>
+                          handleAvailabilityChange(
+                            day,
+                            !isAvailable,
+                            [],
+                            dayAvailability?.startTime,
+                            dayAvailability?.endTime,
+                            requestRestDay,
+                            dayAvailability?.notes
+                          )
+                        }
+                        className={`flex items-center gap-2 h-10 px-4 font-medium ${
+                          isAvailable ? 'bg-green-600 hover:bg-green-700' : 'border-2 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Clock className="w-4 h-4" />
+                        Available
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="default"
+                        disabled={requestRestDay}
+                        onClick={() =>
+                          handleAvailabilityChange(
+                            day,
+                            true,
+                            [],
+                            '00:00',
+                            '23:59',
+                            requestRestDay,
+                            dayAvailability?.notes
+                          )
+                        }
+                        className="flex items-center gap-2 h-10 px-4 font-medium border-2 hover:bg-blue-50 hover:border-blue-300"
+                      >
+                        <Clock className="w-4 h-4" />
+                        Anytime
+                      </Button>
+                    </div>
                   </div>
 
                   <Button
                     variant={requestRestDay ? 'destructive' : 'outline'}
-                    size="sm"
+                    size="default"
                     onClick={() => {
                       const newRequestRestDay = !requestRestDay;
                       handleAvailabilityChange(
@@ -263,18 +346,22 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
                         dayAvailability?.notes
                       );
                     }}
-                    className="flex items-center gap-1"
+                    className={`flex items-center gap-2 h-10 px-4 font-medium self-start lg:self-center ${
+                      requestRestDay 
+                        ? 'bg-red-600 hover:bg-red-700' 
+                        : 'border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300'
+                    }`}
                   >
-                    <Coffee className="w-3 h-3" />
-                    RRD
+                    <Coffee className="w-4 h-4" />
+                    Rest Request Day
                   </Button>
                 </div>
 
                 {isAvailable && !requestRestDay && (
-                  <div className="ml-6 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor={`${day}-startTime`} className="text-sm text-muted-foreground">
+                  <div className="space-y-6 pt-4 border-t-2 border-gray-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <Label htmlFor={`${day}-startTime`} className="text-sm font-semibold text-gray-700">
                           Start Time
                         </Label>
                         <Input
@@ -292,10 +379,11 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
                               dayAvailability?.notes
                             )
                           }
+                          className="w-full h-12 text-base border-2 focus:border-blue-500"
                         />
                       </div>
-                      <div>
-                        <Label htmlFor={`${day}-endTime`} className="text-sm text-muted-foreground">
+                      <div className="space-y-3">
+                        <Label htmlFor={`${day}-endTime`} className="text-sm font-semibold text-gray-700">
                           End Time
                         </Label>
                         <Input
@@ -313,16 +401,15 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
                               dayAvailability?.notes
                             )
                           }
+                          className="w-full h-12 text-base border-2 focus:border-blue-500"
                         />
                       </div>
                     </div>
 
-
-
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Notes (optional):</p>
+                    <div className="space-y-3">
+                      <Label className="text-sm font-semibold text-gray-700">Notes (optional)</Label>
                       <Textarea
-                        placeholder="Any special notes for this day..."
+                        placeholder="Any special notes or preferences for this day..."
                         value={dayAvailability?.notes || ''}
                         onChange={(e) =>
                           handleAvailabilityChange(
@@ -335,16 +422,16 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
                             e.target.value
                           )
                         }
-                        className="min-h-[60px]"
+                        className="min-h-[80px] resize-none border-2 focus:border-blue-500 text-base"
                       />
                     </div>
                   </div>
                 )}
 
                 {requestRestDay && (
-                  <div className="ml-6 p-3 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-sm text-red-700 flex items-center gap-2">
-                      <Coffee className="w-4 h-4" />
+                  <div className="p-4 bg-gradient-to-r from-red-100 to-pink-100 border-2 border-red-300 rounded-lg">
+                    <p className="text-base font-medium text-red-800 flex items-center gap-3">
+                      <Coffee className="w-5 h-5" />
                       Rest Request Day - You will not be scheduled for work on this day.
                     </p>
                   </div>
@@ -357,36 +444,40 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
 
       {/* Error Message */}
       {error && (
-        <Card className="border-destructive">
+        <Card className="border-2 border-red-300 bg-gradient-to-r from-red-50 to-pink-50">
           <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="w-4 h-4" />
-              <p className="text-sm">{error}</p>
+            <div className="flex items-center gap-3 text-red-700">
+              <AlertCircle className="w-5 h-5" />
+              <p className="text-base font-medium">{error}</p>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Save Button */}
-      <div className="flex justify-end">
+      <div className="flex justify-center pt-6">
         <Button
           onClick={handleSave}
           disabled={saving || !localAvailability || availabilityStatus?.isLocked}
-          className="min-w-[120px]"
+          className={`min-w-[200px] h-14 text-lg font-semibold transition-all duration-200 ${
+            availabilityStatus?.isLocked 
+              ? 'bg-gray-400 hover:bg-gray-400' 
+              : 'bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 shadow-lg hover:shadow-xl transform hover:scale-105'
+          }`}
         >
           {saving ? (
             <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
               Saving...
             </>
           ) : availabilityStatus?.isLocked ? (
             <>
-              <AlertCircle className="w-4 h-4 mr-2" />
-              Locked
+              <AlertCircle className="w-5 h-5 mr-3" />
+              Submissions Locked
             </>
           ) : (
             <>
-              <Save className="w-4 h-4 mr-2" />
+              <Save className="w-5 h-5 mr-3" />
               {isSubmitted ? 'Update' : 'Submit'} Availability
             </>
           )}

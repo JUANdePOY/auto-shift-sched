@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../shared/components/ui/button';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '../../shared/components/ui/tooltip';
@@ -17,7 +17,7 @@ import { useAuth } from '../../auth/contexts/AuthContext';
 
 
 type AdminView = 'dashboard' | 'schedule' | 'employees' | 'availability' | 'settings';
-type CrewView = 'dashboard' | 'availability' | 'profile';
+type CrewView = 'dashboard' | 'availability' | 'profile' | 'schedule';
 type View = AdminView | CrewView;
 
 interface NavigationProps {
@@ -35,7 +35,18 @@ interface NavItem {
 
 export function Navigation({ currentView, onViewChange }: NavigationProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const { user, logout } = useAuth();
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const getNavItems = (): NavItem[] => {
     if (user?.role === 'admin') {
@@ -70,17 +81,22 @@ export function Navigation({ currentView, onViewChange }: NavigationProps) {
       return [
         {
           id: 'dashboard',
-          label: 'My Dashboard',
+          label: 'Dashboard',
           icon: LayoutDashboard,
         },
         {
+          id: 'schedule',
+          label: 'Schedule',
+          icon: Calendar,
+        },
+        {
           id: 'availability',
-          label: 'Submit Availability',
+          label: 'Availability',
           icon: Clock,
         },
         {
           id: 'profile',
-          label: 'My Profile',
+          label: 'Profile',
           icon: User,
         },
       ];
@@ -90,9 +106,47 @@ export function Navigation({ currentView, onViewChange }: NavigationProps) {
 
   const navItems = getNavItems();
 
+  // Mobile bottom navigation
+  if (isMobile) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 bg-sidebar border-t border-sidebar-border z-50">
+        <nav className="flex justify-around items-center h-16 px-2">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentView === item.id;
+
+            return (
+              <Button
+                key={item.id}
+                variant="ghost"
+                className={cn(
+                  "flex flex-col items-center justify-center h-12 w-16 px-1 py-1 rounded-lg transition-colors",
+                  isActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+                onClick={() => onViewChange(item.id)}
+              >
+                <div className="relative">
+                  <Icon className="w-5 h-5" />
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center text-xs">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </div>
+                  )}
+                </div>
+                <span className="text-xs mt-1 truncate max-w-full">{item.label.split(' ')[0]}</span>
+              </Button>
+            );
+          })}
+        </nav>
+      </div>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={0}>
-      <div 
+      <div
         className={cn(
           "fixed left-0 top-0 h-full bg-sidebar border-r border-sidebar-border z-50 transition-all duration-300 ease-in-out",
           isExpanded ? "w-64" : "w-18"

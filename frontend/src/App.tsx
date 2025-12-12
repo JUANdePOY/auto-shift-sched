@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { cn } from './lib/utils';
 import { Navigation } from './features/shared/components/Navigation';
 import { Dashboard } from './features/shared/components/Dashboard';
 
@@ -14,10 +15,11 @@ import { LoginForm } from './features/auth/components/LoginForm';
 import { CrewDashboard } from './features/crew/components/CrewDashboard';
 import { CrewAvailabilityPanel } from './features/crew/components/CrewAvailabilityPanel';
 import { CrewProfileWrapper } from './features/crew/components/CrewProfileWrapper';
-import { Settings } from './features/admin/components/Settings'; 
+import { Settings } from './features/admin/components/Settings';
+import { TemporaryScheduleProvider } from './features/schedule/contexts/TemporaryScheduleContext';
 
 type AdminView = 'dashboard' | 'schedule' | 'employees' | 'availability' | 'settings';
-type CrewView = 'dashboard' | 'availability' | 'profile';
+type CrewView = 'dashboard' | 'availability' | 'profile' | 'schedule';
 type View = AdminView | CrewView;
 
 export default function App() {
@@ -64,12 +66,15 @@ export default function App() {
       switch (currentView) {
         case 'schedule':
           return (
-            <ScheduleView
-              employees={employees}
-              conflicts={schedule?.conflicts || []}
-              finalSchedule={finalSchedule}
-              onRefreshData={handleRefreshData}
-            />
+            <TemporaryScheduleProvider>
+              <ScheduleView
+                employees={employees}
+                conflicts={schedule?.conflicts || []}
+                finalSchedule={finalSchedule}
+                schedule={schedule}
+                onRefreshData={handleRefreshData}
+              />
+            </TemporaryScheduleProvider>
           );
 
         case 'employees':
@@ -103,10 +108,24 @@ export default function App() {
     // Crew views
     if (user?.role === 'crew') {
       switch (currentView) {
+        case 'schedule':
+          return (
+            <div className="space-y-6">
+              <TemporaryScheduleProvider>
+                <ScheduleView
+                  employees={employees}
+                  conflicts={schedule?.conflicts || []}
+                  finalSchedule={finalSchedule}
+                  onRefreshData={handleRefreshData}
+                  isReadOnly={true}
+                />
+              </TemporaryScheduleProvider>
+            </div>
+          );
+
         case 'availability':
           return (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold">Submit Availability</h2>
               <CrewAvailabilityPanel employeeId={user.id} />
             </div>
           );
@@ -114,7 +133,6 @@ export default function App() {
         case 'profile':
           return (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold">My Profile</h2>
               <CrewProfileWrapper employeeId={user.id} />
             </div>
           );
@@ -175,8 +193,11 @@ export default function App() {
       />
 
       {/* Main Content */}
-      <div className="ml-16 transition-all duration-300">
-        <div className="container mx-auto p-6">
+      <div className={cn(
+        "transition-all duration-300",
+        user?.role === 'admin' ? "ml-16" : user?.role === 'crew' && window.innerWidth < 768 ? "pb-16" : "ml-16"
+      )}>
+        <div className="container mx-auto p-4 md:p-6">
           {renderCurrentView()}
         </div>
       </div>

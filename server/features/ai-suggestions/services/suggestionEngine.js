@@ -1,5 +1,7 @@
 const db = require('../../../shared/config/database');
 const { formatEmployee, formatShift } = require('../../../shared/utils/formatUtils');
+const StationManager = require('../../schedule/services/stationManager');
+const availabilityService = require('../../availability/services/availabilityService');
 
 /**
  * AI Suggestion Engine for Manual Scheduling
@@ -18,10 +20,14 @@ class SuggestionEngine {
   /**
    * Get ranked suggestions for employees to assign to a shift
    * @param {string} shiftId - The shift ID
+   * @param {string} date - The date for the shift assignment (YYYY-MM-DD)
+   * @param {number} count - Number of suggestions to return
+   * @param {string} shiftId - The shift ID
+   * @param {string} date - The date for the shift assignment (YYYY-MM-DD)
    * @param {number} count - Number of suggestions to return
    * @returns {Promise<Array>} Ranked employee suggestions
    */
-  async getEmployeeSuggestions(shiftId, count = 5) {
+  async getEmployeeSuggestions(shiftId, date, count = 5) {
     try {
       // Get shift details
       const shift = await this.getShift(shiftId);
@@ -29,11 +35,50 @@ class SuggestionEngine {
         throw new Error('Shift not found');
       }
 
-      // Get all employees
-      const employees = await this.getEmployees();
+      // Set the date on the shift object since shifts are templates without dates
+      shift.date = date;
 
-      // Filter available employees
-      const availableEmployees = this.filterAvailableEmployees(employees, shift);
+      // Get employees with matching stations for better performance
+      const employees = shift.requiredStation && shift.requiredStation.length > 0 
+        ? await this.getEmployeesByStation(shift.requiredStation)
+        : await this.getEmployees();
+
+      // Filter available employees asynchronously checking availability for exact date and time
+      const availableEmployees = [];
+      for (const employee of employees) {
+        // Check availability for exact shift date and time using availabilityService
+        const availabilityCheck = await availabilityService.checkEmployeeAvailability(
+          employee.id,
+          shift.date,
+          shift.startTime,
+          shift.endTime
+        );
+
+        // Check if availability available (preferred time matching is bonus, not requirement)
+        if (!availabilityCheck.available) {
+          continue;
+        }
+        // Check if employee has any matching stations (more inclusive for suggestions)
+        if (shift.requiredStation && shift.requiredStation.length > 0) {
+          const hasAnyMatchingStation = this.hasAnyMatchingStation(employee, shift.requiredStation);
+          if (!hasAnyMatchingStation) continue;
+        }
+
+        // Check if employee already assigned to this specific shift
+        if (shift.assignedEmployees && shift.assignedEmployees.includes(employee.id.toString())) {
+          continue;
+        }
+
+        // Check if employee is already assigned to any shift on this date
+        if (await this.isEmployeeAlreadyAssigned(employee.id, shift.date)) {
+          continue;
+        }
+
+        // Mark availability details on the employee for scoring
+        employee.availabilitySubmitted = availabilityCheck.available;
+        employee.availabilityPreferred = availabilityCheck.preferred;
+        availableEmployees.push(employee);
+      }
 
       // Rank employees by suitability
       const rankedSuggestions = availableEmployees
@@ -62,53 +107,45 @@ class SuggestionEngine {
   }
 
   /**
-   * Get all employees
+   * Get all employees without availability fetched
    */
   async getEmployees() {
     const [results] = await db.query('SELECT * FROM employees');
+    const employees = results.map(employee => formatEmployee(employee));
+    return employees;
+  }
+
+  /**
+   * Get employees by station directly from database
+   * @param {Array} stations - Array of station names to match
+   * @returns {Promise<Array>} Employees with matching stations
+   */
+  async getEmployeesByStation(stations) {
+    if (!stations || stations.length === 0) {
+      return await this.getEmployees();
+    }
+
+    // Flatten and normalize station names
+    const flatStations = stations.flat().map(s => s.toLowerCase().trim());
+    
+    // Create LIKE conditions for each station
+    const likeConditions = flatStations.map(() => 'LOWER(station) LIKE ?').join(' OR ');
+    const likeParams = flatStations.map(station => `%${station}%`);
+
+    const [results] = await db.query(
+      `SELECT * FROM employees WHERE ${likeConditions}`,
+      likeParams
+    );
+    
     return results.map(employee => formatEmployee(employee));
   }
 
   /**
    * Filter employees available for the shift
+   * (Not used now, availability checked asynchronously in getEmployeeSuggestions)
    */
-  filterAvailableEmployees(employees, shift) {
-    return employees.filter(employee => {
-      // Check availability for the shift day
-      const dayOfWeek = this.getDayOfWeek(shift.date);
-      const availability = employee.availability[dayOfWeek];
-
-      if (!availability || !availability.available) {
-        return false;
-      }
-
-      // Check if employee has required skills
-      if (shift.requiredSkills.length > 0) {
-        const hasRequiredSkills = shift.requiredSkills.every(skill =>
-          employee.skills.includes(skill)
-        );
-        if (!hasRequiredSkills) return false;
-      }
-
-      // Check if shift time falls within availability
-      if (availability.preferredStart && availability.preferredEnd) {
-        const shiftStart = new Date(`1970-01-01T${shift.startTime}`);
-        const shiftEnd = new Date(`1970-01-01T${shift.endTime}`);
-        const preferredStart = new Date(`1970-01-01T${availability.preferredStart}`);
-        const preferredEnd = new Date(`1970-01-01T${availability.preferredEnd}`);
-
-        if (shiftStart < preferredStart || shiftEnd > preferredEnd) {
-          return false;
-        }
-      }
-
-      // Check if employee is already assigned on this date (prevent multiple shifts per day)
-      if (this.isEmployeeAlreadyAssigned(employee.id, shift.date)) {
-        return false;
-      }
-
-      return true;
-    });
+  filterAvailableEmployees() {
+    throw new Error('filterAvailableEmployees is no longer used. Availability checked per employee asynchronously.');
   }
 
   /**
@@ -117,12 +154,17 @@ class SuggestionEngine {
   calculateSuitabilityScore(employee, shift) {
     let score = 0;
 
-    // Skill matching (40%)
-    const skillMatch = this.calculateSkillMatch(employee.skills, shift.requiredSkills);
-    score += skillMatch * this.weights.skillMatch * 100;
+    // Station matching (40%)
+    const stationMatch = StationManager.calculateSkillMatchScore(employee, shift.requiredStation || []);
+    score += (stationMatch / 100) * this.weights.skillMatch * 100;
 
     // Availability alignment (30%)
-    const availabilityScore = this.calculateAvailabilityScore(employee, shift);
+    let availabilityScore = 0.1; // Default low score if no availability
+    if (employee.availabilitySubmitted && employee.availabilityPreferred !== false) {
+      availabilityScore = 1.0;
+    } else if (employee.availabilitySubmitted) {
+      availabilityScore = 0.6;
+    }
     score += availabilityScore * this.weights.availability * 100;
 
     // Workload balance (20%)
@@ -151,30 +193,10 @@ class SuggestionEngine {
 
   /**
    * Calculate availability alignment score
+   * (Not used, handled in calculateSuitabilityScore above)
    */
-  calculateAvailabilityScore(employee, shift) {
-    const dayOfWeek = this.getDayOfWeek(shift.date);
-    const availability = employee.availability[dayOfWeek];
-    
-    if (!availability.preferredStart || !availability.preferredEnd) {
-      return 0.7; // Good score if available but no preferences
-    }
-
-    const shiftStart = new Date(`1970-01-01T${shift.startTime}`);
-    const shiftEnd = new Date(`1970-01-01T${shift.endTime}`);
-    const preferredStart = new Date(`1970-01-01T${availability.preferredStart}`);
-    const preferredEnd = new Date(`1970-01-01T${availability.preferredEnd}`);
-
-    // Perfect match if shift falls exactly within preferred range
-    if (shiftStart >= preferredStart && shiftEnd <= preferredEnd) {
-      return 1.0;
-    }
-
-    // Calculate overlap percentage
-    const overlap = Math.max(0, Math.min(shiftEnd, preferredEnd) - Math.max(shiftStart, preferredStart));
-    const totalDuration = shiftEnd - shiftStart;
-    
-    return Math.min(overlap / totalDuration, 0.9); // Cap at 0.9 for partial matches
+  calculateAvailabilityScore() {
+    throw new Error('calculateAvailabilityScore is no longer used, availability score set in calculateSuitabilityScore.');
   }
 
   /**
@@ -201,8 +223,8 @@ class SuggestionEngine {
       'crew': 0.6,
       'trainee': 0.5
     };
-    
-    return roleScores[employee.role.toLowerCase()] || 0.6;
+
+    return roleScores[employee.role && employee.role.toLowerCase()] || 0.6;
   }
 
   /**
@@ -211,22 +233,23 @@ class SuggestionEngine {
   getSuggestionReasons(employee, shift) {
     const reasons = [];
 
-    // Skill match reason
-    const skillMatch = this.calculateSkillMatch(employee.skills, shift.requiredSkills);
-    if (skillMatch === 1) {
-      reasons.push('Perfect skill match');
-    } else if (skillMatch >= 0.8) {
-      reasons.push('Excellent skill match');
-    } else if (skillMatch >= 0.6) {
-      reasons.push('Good skill match');
+    // Station match reason
+    const stationMatch = StationManager.calculateSkillMatchScore(employee, shift.requiredStation || []);
+    if (stationMatch >= 90) {
+      reasons.push('Perfect station match');
+    } else if (stationMatch >= 70) {
+      reasons.push('Excellent station match');
+    } else if (stationMatch >= 50) {
+      reasons.push('Good station match');
     }
 
     // Availability reason
-    const availabilityScore = this.calculateAvailabilityScore(employee, shift);
-    if (availabilityScore === 1) {
-      reasons.push('Perfect availability match');
-    } else if (availabilityScore >= 0.9) {
-      reasons.push('Excellent availability');
+    if (employee.availabilitySubmitted && employee.availabilityPreferred) {
+      reasons.push('Matches day availability and time in/out of shift');
+    } else if (employee.availabilitySubmitted) {
+      reasons.push('Submitted availability but not preferred time');
+    } else {
+      reasons.push('Did not submit availability');
     }
 
     // Workload reason
@@ -235,11 +258,6 @@ class SuggestionEngine {
       reasons.push('Underutilized - good for balance');
     } else if (utilization < 0.6) {
       reasons.push('Good workload balance');
-    }
-
-    // Experience reason
-    if (employee.role.toLowerCase() === 'manager' || employee.role.toLowerCase() === 'supervisor') {
-      reasons.push('Leadership role');
     }
 
     return reasons;
@@ -285,17 +303,103 @@ class SuggestionEngine {
   }
 
   /**
+   * Check if employee has any matching station (more inclusive than hasRequiredSkills)
+   * @param {Object} employee - Employee object with station skills
+   * @param {Array} requiredStations - Required station names
+   * @returns {boolean} Has any matching station
+   */
+  hasAnyMatchingStation(employee, requiredStations) {
+    if (!requiredStations || requiredStations.length === 0) return true;
+
+    // Get employee stations as array of strings
+    let employeeStations = [];
+    if (Array.isArray(employee.station)) {
+      employeeStations = employee.station.flat().map(station => {
+        if (typeof station === 'string') {
+          return station.trim().toLowerCase();
+        }
+        if (typeof station === 'object' && station !== null && 'name' in station) {
+          return typeof station.name === 'string' ? station.name.trim().toLowerCase() : '';
+        }
+        return String(station).trim().toLowerCase();
+      });
+    } else if (typeof employee.station === 'string') {
+      employeeStations = employee.station.split(',').map(s => s.trim().toLowerCase());
+    } else {
+      employeeStations = String(employee.station || '').split(',').map(s => s.trim().toLowerCase());
+    }
+
+    // Remove empty strings
+    employeeStations = employeeStations.filter(s => s !== '');
+
+    // Flatten and clean up required stations
+    const trimmedRequiredStations = requiredStations
+      .flat()
+      .filter(s => s != null && s !== '')
+      .map(s => s.trim().toLowerCase());
+
+    // Check for ANY matches (not all required)
+    return trimmedRequiredStations.some(required =>
+      employeeStations.some(empStation =>
+        StationManager.normalizeStationName(empStation) === StationManager.normalizeStationName(required)
+      )
+    );
+  }
+
+  /**
+   * Get the start of the week (Monday) for a given date
+   * @param {string} dateString - Date string (YYYY-MM-DD)
+   * @returns {string} Week start date string (YYYY-MM-DD)
+   */
+  getWeekStart(dateString) {
+    const date = new Date(dateString);
+    const day = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
+    const weekStart = new Date(date.setDate(diff));
+    return weekStart.toISOString().split('T')[0];
+  }
+
+  /**
    * Get replacement suggestions for absent employees
    */
-  async getReplacementSuggestions(shiftId, absentEmployeeId) {
-    const suggestions = await this.getEmployeeSuggestions(shiftId, 3);
-    
+  async getReplacementSuggestions(shiftId, absentEmployeeId, date) {
+    const suggestions = await this.getEmployeeSuggestions(shiftId, date, 3);
+
     return suggestions.map(suggestion => ({
       ...suggestion,
       replacementFor: absentEmployeeId,
       confidence: Math.min(95, suggestion.score) // Cap confidence at 95%
     }));
   }
+
+  /**
+   * Get top 3 suggestions for employees not already assigned to any shift on the given date
+   * @param {string} shiftId - The shift ID
+   * @param {string} date - The date for the shift assignment (YYYY-MM-DD)
+   * @returns {Promise<Array>} Top 3 unassigned employee suggestions
+   */
+  async getTopUnassignedSuggestions(shiftId, date) {
+    try {
+      // Get all suggestions (more than 3 to account for filtering)
+      const allSuggestions = await this.getEmployeeSuggestions(shiftId, date, 10);
+
+      // Filter out employees already assigned to any shift on this date
+      const unassignedSuggestions = [];
+      for (const suggestion of allSuggestions) {
+        const isAssigned = await this.isEmployeeAlreadyAssigned(suggestion.employee.id, date);
+        if (!isAssigned) {
+          unassignedSuggestions.push(suggestion);
+          if (unassignedSuggestions.length >= 3) break; // Stop once we have 3
+        }
+      }
+
+      return unassignedSuggestions;
+    } catch (error) {
+      console.error('Error generating unassigned suggestions:', error);
+      throw error;
+    }
+  }
 }
 
+module.exports = new SuggestionEngine();
 module.exports = new SuggestionEngine();

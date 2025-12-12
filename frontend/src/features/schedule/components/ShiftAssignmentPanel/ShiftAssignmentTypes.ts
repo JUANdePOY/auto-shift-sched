@@ -37,7 +37,6 @@ export interface AssignmentProgressProps {
 
 export interface ShiftAssignmentsTableProps {
   assignments: ShiftAssignment[];
-  typeFilter: string;
   onAssignEmployee: (shiftId: string, employeeId: string) => void;
   onUnassignEmployee: (shiftId: string) => void;
   onOpenAISuggestionPanel: (shiftId: string) => void;

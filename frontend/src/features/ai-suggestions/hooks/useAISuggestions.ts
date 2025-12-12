@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { AISuggestion, Employee } from '../../shared/types';
+import { getEmployeeSuggestions, getTopUnassignedSuggestions } from '../../schedule/services/scheduleService';
 import {
-  generateShiftSuggestions,
   getAvailableEmployeesForShift
 } from '../utils/suggestionUtils';
 
@@ -25,6 +25,8 @@ export function useAISuggestions({
   employeeCurrentHours = {}
 }: UseAISuggestionsProps) {
   const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
+  const [shiftSuggestions, setShiftSuggestions] = useState<AISuggestion[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Memoize available employees for the shift
   const availableForShift = useMemo(() => {
@@ -36,30 +38,48 @@ export function useAISuggestions({
     );
   }, [availableEmployees, shiftDate, shiftTime, shiftEndTime]);
 
-  // Memoize generated suggestions
-  const shiftSuggestions = useMemo(() => {
-    if (!shiftId || !availableForShift.length) {
-      return [];
-    }
+  // Fetch suggestions from backend when shiftId and shiftDate are available
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (!shiftId || !shiftDate) {
+        setShiftSuggestions([]);
+        return;
+      }
 
-    return generateShiftSuggestions(
-      shiftId,
-      availableForShift,
-      requiredStations,
-      shiftDate,
-      shiftTime,
-      shiftEndTime,
-      employeeCurrentHours
-    );
-  }, [
-    shiftId,
-    availableForShift,
-    requiredStations,
-    shiftDate,
-    shiftTime,
-    shiftEndTime,
-    employeeCurrentHours
-  ]);
+      setIsLoading(true);
+      try {
+        const suggestions = await getEmployeeSuggestions(shiftId, shiftDate);
+        // Convert backend response to AISuggestion format
+        const formattedSuggestions: AISuggestion[] = suggestions.map((suggestion, index) => ({
+          id: `backend-suggestion-${shiftId}-${index}`,
+          type: 'assignment',
+          title: `AI Recommendation: ${suggestion.employee.name}`,
+          description: `${suggestion.employee.name} is recommended based on skill matching, availability, and workload balance.`,
+          confidence: Math.min(95, Math.round(suggestion.score * 0.95)), // Convert score to confidence percentage
+          impact: {
+            efficiency: Math.round(suggestion.score * 0.3),
+            satisfaction: Math.round(suggestion.score * 0.25),
+            coverage: Math.round(suggestion.score * 0.35)
+          },
+          action: {
+            type: 'assign',
+            shiftId: shiftId,
+            employeeId: suggestion.employee.id,
+            employeeName: suggestion.employee.name
+          },
+          reasons: suggestion.reasons // Add reasons to the suggestion object
+        }));
+        setShiftSuggestions(formattedSuggestions);
+      } catch (error) {
+        console.error('Failed to fetch AI suggestions:', error);
+        setShiftSuggestions([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSuggestions();
+  }, [shiftId, shiftDate]);
 
   const handleApplySuggestion = (suggestion: AISuggestion) => {
     setAppliedSuggestions(prev => new Set([...prev, suggestion.id]));

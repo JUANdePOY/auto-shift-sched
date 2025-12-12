@@ -11,14 +11,14 @@ import type { LoginCredentials } from '../types';
 export function LoginForm() {
   const { login, isLoading, error } = useAuth();
   const [credentials, setCredentials] = useState<LoginCredentials>({
-    email: '',
+    name: '',
     password: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!credentials.email || !credentials.password) {
+    if (!credentials.name || !credentials.password) {
       return;
     }
 
@@ -68,13 +68,13 @@ export function LoginForm() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="name">Name</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="your.email@company.com"
-                  value={credentials.email}
-                  onChange={handleInputChange('email')}
+                  id="name"
+                  type="text"
+                  placeholder="Enter your name"
+                  value={credentials.name}
+                  onChange={handleInputChange('name')}
                   required
                   disabled={isLoading}
                 />
@@ -96,7 +96,7 @@ export function LoginForm() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isLoading || !credentials.email || !credentials.password}
+                disabled={isLoading || !credentials.name || !credentials.password}
               >
                 {isLoading ? (
                   <>
@@ -115,8 +115,8 @@ export function LoginForm() {
             <div className="mt-6 text-center text-sm text-gray-600">
               <p>Demo Credentials:</p>
               <div className="mt-2 space-y-1">
-                <p><strong>Admin:</strong> admin@test.com / admin123</p>
-                <p><strong>Crew:</strong> crew@test.com / crew123</p>
+                <p><strong>Admin:</strong> admin / admin123</p>
+                <p><strong>Crew:</strong> crew / crew123</p>
               </div>
             </div>
           </CardContent>

@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from '../../../shared/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/components/ui/select';
 import { Badge } from '../../../shared/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../shared/components/ui/card';
-import { Trash2, Edit, Lightbulb } from 'lucide-react';
+import { Input } from '../../../shared/components/ui/input';
+import { Trash2, Edit, Lightbulb, Search, Filter } from 'lucide-react';
 import type { ShiftAssignmentsTableProps } from './ShiftAssignmentTypes';
 
 const ShiftAssignmentsTable: React.FC<ShiftAssignmentsTableProps> = ({
@@ -16,10 +17,39 @@ const ShiftAssignmentsTable: React.FC<ShiftAssignmentsTableProps> = ({
   onDeleteShift,
   getAvailableEmployees
 }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [stationFilter, setStationFilter] = useState('all');
 
-  const filteredAssignments = assignments.filter(assignment =>
-    typeFilter === 'all' || assignment.type === typeFilter
-  );
+  // Get unique stations from all assignments
+  const availableStations = useMemo(() => {
+    const stations = new Set<string>();
+    assignments.forEach(assignment => {
+      assignment.requiredStation.forEach(station => stations.add(station));
+    });
+    return Array.from(stations).sort();
+  }, [assignments]);
+
+  const filteredAssignments = useMemo(() => {
+    return assignments.filter(assignment => {
+      // Type filter
+      const matchesType = typeFilter === 'all' || assignment.type === typeFilter;
+      
+      // Station filter
+      const matchesStation = stationFilter === 'all' || 
+        assignment.requiredStation.includes(stationFilter);
+      
+      // Search filter (title, department, assigned employee)
+      const matchesSearch = searchTerm === '' || 
+        assignment.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignment.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignment.assignedEmployee?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignment.requiredStation.some(station => 
+          station.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      
+      return matchesType && matchesStation && matchesSearch;
+    });
+  }, [assignments, typeFilter, stationFilter, searchTerm]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -44,6 +74,36 @@ const ShiftAssignmentsTable: React.FC<ShiftAssignmentsTableProps> = ({
     <Card>
       <CardHeader>
         <CardTitle>Shift Assignments</CardTitle>
+        <div className="flex flex-col sm:flex-row gap-4 mt-4">
+          {/* Search Input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Input
+              placeholder="Search shifts, departments, employees, or stations..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          
+          {/* Station Filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-gray-500" />
+            <Select value={stationFilter} onValueChange={setStationFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filter by station" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Stations</SelectItem>
+                {availableStations.map(station => (
+                  <SelectItem key={station} value={station}>
+                    {station}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">

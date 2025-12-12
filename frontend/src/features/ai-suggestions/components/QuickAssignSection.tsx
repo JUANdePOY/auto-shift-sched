@@ -62,12 +62,15 @@ export function QuickAssignSection({
       .filter(s => s != null && s !== '')
       .map(s => s.trim().toLowerCase());
 
-    // Check for matches and store matching stations
-    const matchingStations = trimmedRequiredStations.filter(required =>
-      employeeStations.includes(required)
+    // Check for matches - employee needs at least one matching station
+    const hasMatchingStation = trimmedRequiredStations.some(required =>
+      employeeStations.some(empStation => 
+        empStation.toLowerCase().includes(required.toLowerCase()) || 
+        required.toLowerCase().includes(empStation.toLowerCase())
+      )
     );
 
-    return matchingStations.length > 0 && employee.department === department;
+    return hasMatchingStation;
   });
 
   const handleAssign = () => {
@@ -104,7 +107,7 @@ export function QuickAssignSection({
 
               return (
                 <SelectItem key={employee.id} value={employee.id}>
-                  {employee.name} - {employee.role} (Current: {currentHours.toFixed(1)} hrs, After: {afterHours.toFixed(1)} hrs)
+                  {employee.name} - {employee.role} (Current: {currentHours.toFixed(1)} hrs)
                 </SelectItem>
               );
             })}

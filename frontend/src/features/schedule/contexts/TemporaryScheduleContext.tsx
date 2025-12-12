@@ -1,291 +1,284 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, type ReactNode, useMemo } from 'react';
+import type { Employee } from '../../shared/types';
+import { saveFinalSchedule } from '../services/scheduleService';
 
 export interface TemporaryAssignment {
   shiftId: string;
   employeeId: string;
-  employeeName: string;
-  shiftTitle: string;
-  department: string;
-  requiredStations: string[];
-  time: string;
-  startTime: string;
-  endTime: string;
-  date: string;
+  employee?: Employee;
+  shiftData?: {
+    title: string;
+    startTime: string;
+    endTime: string;
+    department: string;
+    requiredStation: string[];
+  };
 }
 
-export interface DailySchedule {
-  date: string;
-  assignments: TemporaryAssignment[];
-  isCompleted: boolean;
+interface TemporaryScheduleState {
+  [date: string]: TemporaryAssignment[];
 }
 
-export interface WeeklyScheduleSummary {
-  totalDays: number;
-  completedDays: number;
-  totalAssignments: number;
-  employeeWorkloads: EmployeeWorkload[];
-  conflicts: ScheduleConflict[];
-}
-
-export interface EmployeeWorkload {
+interface EmployeeWorkload {
   employeeId: string;
   employeeName: string;
-  totalShifts: number;
   totalHours: number;
-  status: 'underworked' | 'balanced' | 'overworked';
+  totalShifts: number;
+  status: 'underworked' | 'overworked' | 'balanced';
   departments: string[];
 }
 
-export interface ScheduleConflict {
-  type: 'double-booking' | 'overtime' | 'station-mismatch';
+interface ScheduleConflict {
+  date: string;
   employeeId: string;
-  employeeName: string;
-  date?: string;
-  message: string;
   severity: 'warning' | 'error';
+  message: string;
+}
+
+interface ScheduleSummary {
+  employeeWorkloads: EmployeeWorkload[];
+  conflicts: ScheduleConflict[];
+  totalAssignments: number;
+  totalDays: number;
+  completedDays: number;
 }
 
 interface TemporaryScheduleContextType {
-  weeklySchedule: DailySchedule[];
-  summary: WeeklyScheduleSummary;
-  saveDailySchedule: (date: string, assignments: TemporaryAssignment[]) => void;
-  getDailySchedule: (date: string) => DailySchedule | undefined;
-  clearWeeklySchedule: () => void;
+  assignments: TemporaryScheduleState;
+  summary: ScheduleSummary;
+  getAssignmentsForDate: (date: string) => TemporaryAssignment[];
+  updateAssignment: (date: string, shiftId: string, employeeId: string | null, employee?: Employee, shiftData?: TemporaryAssignment['shiftData']) => void;
+  clearAssignmentsForDate: (date: string) => void;
+  clearAllAssignments: () => void;
+  hasAssignmentsForDate: (date: string) => boolean;
   canSaveWeeklySchedule: () => boolean;
-  saveWeeklySchedule: () => Promise<boolean>;
+  saveWeeklySchedule: (weekDates: Date[]) => Promise<boolean>;
 }
 
 const TemporaryScheduleContext = createContext<TemporaryScheduleContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'temporary-weekly-schedule';
+// localStorage key for persisting temporary assignments
+const TEMPORARY_ASSIGNMENTS_KEY = 'shift-app-temporary-assignments';
 
-export function TemporaryScheduleProvider({ children }: { children: ReactNode }) {
-  const [weeklySchedule, setWeeklySchedule] = useState<DailySchedule[]>([]);
+// Helper functions for localStorage operations
+const loadAssignmentsFromStorage = (): TemporaryScheduleState => {
+  try {
+    const stored = localStorage.getItem(TEMPORARY_ASSIGNMENTS_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch (error) {
+    console.warn('Failed to load assignments from localStorage:', error);
+    return {};
+  }
+};
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setWeeklySchedule(parsed);
-      } catch (error) {
-        console.error('Failed to load temporary schedule from localStorage:', error);
-      }
-    }
-  }, []);
+const saveAssignmentsToStorage = (assignments: TemporaryScheduleState): void => {
+  try {
+    localStorage.setItem(TEMPORARY_ASSIGNMENTS_KEY, JSON.stringify(assignments));
+  } catch (error) {
+    console.warn('Failed to save assignments to localStorage:', error);
+  }
+};
 
-  // Save to localStorage whenever weeklySchedule changes
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(weeklySchedule));
-  }, [weeklySchedule]);
+interface TemporaryScheduleProviderProps {
+  children: ReactNode;
+}
 
-  const saveDailySchedule = (date: string, assignments: TemporaryAssignment[]) => {
-    setWeeklySchedule(prev => {
-      const existingIndex = prev.findIndex(day => day.date === date);
-      const isCompleted = assignments.length > 0;
+export function TemporaryScheduleProvider({ children }: TemporaryScheduleProviderProps) {
+  const [assignments, setAssignments] = useState<TemporaryScheduleState>(loadAssignmentsFromStorage);
 
-      if (existingIndex >= 0) {
-        // Update existing day
-        const updated = [...prev];
-        updated[existingIndex] = { date, assignments, isCompleted };
-        return updated;
+  const getAssignmentsForDate = (date: string): TemporaryAssignment[] => {
+    return assignments[date] || [];
+  };
+
+  const updateAssignment = (date: string, shiftId: string, employeeId: string | null, employee?: Employee, shiftData?: TemporaryAssignment['shiftData']) => {
+    setAssignments(prev => {
+      const dateAssignments = prev[date] || [];
+      let updatedAssignments;
+
+      if (employeeId === null) {
+        // Remove assignment
+        updatedAssignments = dateAssignments.filter(assignment => assignment.shiftId !== shiftId);
       } else {
-        // Add new day
-        return [...prev, { date, assignments, isCompleted }];
+        // Add or update assignment
+        const existingIndex = dateAssignments.findIndex(assignment => assignment.shiftId === shiftId);
+        const existingAssignment = dateAssignments[existingIndex];
+        const newAssignment: TemporaryAssignment = {
+          shiftId,
+          employeeId,
+          employee,
+          shiftData: shiftData || existingAssignment?.shiftData
+        };
+
+        if (existingIndex >= 0) {
+          updatedAssignments = [...dateAssignments];
+          updatedAssignments[existingIndex] = newAssignment;
+        } else {
+          updatedAssignments = [...dateAssignments, newAssignment];
+        }
       }
+
+      return {
+        ...prev,
+        [date]: updatedAssignments
+      };
     });
   };
 
-  const getDailySchedule = (date: string): DailySchedule | undefined => {
-    return weeklySchedule.find(day => day.date === date);
+  const clearAssignmentsForDate = (date: string) => {
+    setAssignments(prev => {
+      const newAssignments = { ...prev };
+      delete newAssignments[date];
+      return newAssignments;
+    });
   };
 
-  const clearWeeklySchedule = () => {
-    setWeeklySchedule([]);
-    localStorage.removeItem(STORAGE_KEY);
+  const clearAllAssignments = () => {
+    setAssignments({});
   };
 
-  const calculateEmployeeWorkloads = (): EmployeeWorkload[] => {
-    const employeeMap = new Map<string, EmployeeWorkload>();
+  const hasAssignmentsForDate = (date: string): boolean => {
+    return (assignments[date]?.length || 0) > 0;
+  };
 
-    weeklySchedule.forEach(day => {
-      day.assignments.forEach(assignment => {
-        const { employeeId, employeeName, startTime, endTime, department } = assignment;
+  // Calculate summary from assignments
+  const summary = useMemo((): ScheduleSummary => {
+    const employeeWorkloads: EmployeeWorkload[] = [];
+    const conflicts: ScheduleConflict[] = [];
+    let totalAssignments = 0;
+
+    // Calculate total days and completed days
+    const totalDays = 7; // Standard work week
+    const completedDays = Object.keys(assignments).length;
+
+    // Group assignments by employee
+    const employeeMap = new Map<string, { name: string; assignments: TemporaryAssignment[] }>();
+
+    Object.values(assignments).forEach(dateAssignments => {
+      dateAssignments.forEach(assignment => {
+        totalAssignments++;
+        const employeeId = assignment.employeeId;
+        const employeeName = assignment.employee?.name || `Employee ${employeeId}`;
 
         if (!employeeMap.has(employeeId)) {
-          employeeMap.set(employeeId, {
-            employeeId,
-            employeeName,
-            totalShifts: 0,
-            totalHours: 0,
-            status: 'underworked',
-            departments: []
-          });
+          employeeMap.set(employeeId, { name: employeeName, assignments: [] });
         }
-
-        const workload = employeeMap.get(employeeId)!;
-        workload.totalShifts += 1;
-
-        // Calculate hours from shift duration
-        const start = new Date(`2000-01-01T${startTime}`);
-        const end = new Date(`2000-01-01T${endTime}`);
-        const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-        workload.totalHours += hours;
-
-        // Track departments
-        if (!workload.departments.includes(department)) {
-          workload.departments.push(department);
-        }
+        employeeMap.get(employeeId)!.assignments.push(assignment);
       });
     });
 
-    // Determine status based on total hours
-    return Array.from(employeeMap.values()).map(workload => ({
-      ...workload,
-      status: workload.totalHours < 20 ? 'underworked' :
-              workload.totalHours > 40 ? 'overworked' : 'balanced'
-    }));
-  };
+    // Calculate workloads
+    employeeMap.forEach((data, employeeId) => {
+      const totalShifts = data.assignments.length;
+      // Assume 6 hours per shift for simplicity
+      const totalHours = totalShifts * 6;
 
-  const detectConflicts = (): ScheduleConflict[] => {
-    const conflicts: ScheduleConflict[] = [];
+      // Determine status based on hours
+      let status: 'underworked' | 'overworked' | 'balanced' = 'balanced';
+      if (totalHours < 20) {
+        status = 'underworked';
+      } else if (totalHours > 40) {
+        status = 'overworked';
+      }
 
-    // Check for double-bookings
-    weeklySchedule.forEach(day => {
-      const employeeAssignments = new Map<string, TemporaryAssignment[]>();
+      // Get departments from employee data (simplified for now)
+      const departments = data.assignments[0]?.employee?.department ? [data.assignments[0].employee.department] : [];
 
-      day.assignments.forEach(assignment => {
-        if (!employeeAssignments.has(assignment.employeeId)) {
-          employeeAssignments.set(assignment.employeeId, []);
-        }
-        employeeAssignments.get(assignment.employeeId)!.push(assignment);
+      employeeWorkloads.push({
+        employeeId,
+        employeeName: data.name,
+        totalHours,
+        totalShifts,
+        status,
+        departments
       });
 
-      employeeAssignments.forEach((assignments, employeeId) => {
-        if (assignments.length > 1) {
-          // Check for overlapping times
-          const sortedAssignments = assignments.sort((a, b) =>
-            new Date(`2000-01-01T${a.startTime}`).getTime() -
-            new Date(`2000-01-01T${b.startTime}`).getTime()
-          );
-
-          for (let i = 0; i < sortedAssignments.length - 1; i++) {
-            const current = sortedAssignments[i];
-            const next = sortedAssignments[i + 1];
-
-            const currentEnd = new Date(`2000-01-01T${current.endTime}`);
-            const nextStart = new Date(`2000-01-01T${next.startTime}`);
-
-            if (currentEnd > nextStart) {
-              conflicts.push({
-                type: 'double-booking',
-                employeeId,
-                employeeName: current.employeeName,
-                date: day.date,
-                message: `Overlapping shifts on ${day.date}: ${current.shiftTitle} and ${next.shiftTitle}`,
-                severity: 'error'
-              });
-            }
-          }
-        }
-      });
-    });
-
-    // Check for overtime (>40 hours/week)
-    const workloads = calculateEmployeeWorkloads();
-    workloads.forEach(workload => {
-      if (workload.totalHours > 40) {
+      // Check for conflicts (e.g., too many hours)
+      if (totalHours > 40) {
         conflicts.push({
-          type: 'overtime',
-          employeeId: workload.employeeId,
-          employeeName: workload.employeeName,
-          message: `${workload.employeeName} is scheduled for ${workload.totalHours.toFixed(1)} hours (over 40-hour limit)`,
-          severity: 'warning'
+          date: '', // Weekly conflict
+          employeeId,
+          severity: 'warning',
+          message: `Employee ${data.name} is scheduled for ${totalHours} hours this week`
         });
       }
     });
 
-    return conflicts;
-  };
-
-  const summary: WeeklyScheduleSummary = {
-    totalDays: 7,
-    completedDays: weeklySchedule.filter(day => day.isCompleted).length,
-    totalAssignments: weeklySchedule.reduce((sum, day) => sum + day.assignments.length, 0),
-    employeeWorkloads: calculateEmployeeWorkloads(),
-    conflicts: detectConflicts()
-  };
+    return {
+      employeeWorkloads,
+      conflicts,
+      totalAssignments,
+      totalDays,
+      completedDays
+    };
+  }, [assignments]);
 
   const canSaveWeeklySchedule = (): boolean => {
-    return summary.completedDays === 7 && summary.conflicts.filter(c => c.severity === 'error').length === 0;
+    return summary.totalAssignments > 0 && summary.conflicts.filter((c: ScheduleConflict) => c.severity === 'error').length === 0;
   };
 
-  const saveWeeklySchedule = async (): Promise<boolean> => {
-    if (!canSaveWeeklySchedule()) {
-      return false;
-    }
-
+  const saveWeeklySchedule = async (weekDates: Date[]): Promise<boolean> => {
     try {
-      // Flatten all assignments for the week
-      const allAssignments = weeklySchedule.flatMap(day =>
-        day.assignments.map(assignment => ({
-          ...assignment,
-          date: day.date
-        }))
-      );
+      console.log('Saving weekly schedule:', assignments);
 
-      // Group by date for API call
-      const assignmentsByDate = allAssignments.reduce((acc, assignment) => {
-        if (!acc[assignment.date]) {
-          acc[assignment.date] = [];
+      // Loop through each date in the week
+      for (const date of weekDates) {
+        const dateString = date.getFullYear() + '-' +
+          String(date.getMonth() + 1).padStart(2, '0') + '-' +
+          String(date.getDate()).padStart(2, '0');
+
+        const dateAssignments = assignments[dateString] || [];
+
+        if (dateAssignments.length > 0) {
+          // Format assignments for the API
+          const formattedAssignments = dateAssignments.map(assignment => ({
+            shiftId: assignment.shiftId,
+            employeeId: assignment.employeeId,
+            employeeName: assignment.employee?.name || '',
+            shiftTitle: assignment.shiftData?.title || '', // Use stored shift data
+            timeIn: assignment.shiftData?.startTime || null,
+            timeOut: assignment.shiftData?.endTime || null,
+            department: assignment.shiftData?.department || assignment.employee?.department || '',
+            requiredStations: assignment.shiftData?.requiredStation || []
+          }));
+
+          // Save to final_schedule table via API
+          await saveFinalSchedule(dateString, formattedAssignments, 'Weekly schedule save');
         }
-        acc[assignment.date].push(assignment);
-        return acc;
-      }, {} as Record<string, TemporaryAssignment[]>);
-
-      // Save each day's schedule
-      for (const [date, assignments] of Object.entries(assignmentsByDate)) {
-        await fetch(`/api/schedule/save-final`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            date,
-            assignments: assignments.map(a => ({
-              shiftId: a.shiftId,
-              employeeId: a.employeeId,
-              employeeName: a.employeeName,
-              shiftTitle: a.shiftTitle,
-              department: a.department,
-              requiredStations: a.requiredStations,
-              time: a.time,
-              startTime: a.startTime,
-              endTime: a.endTime
-            }))
-          })
-        });
       }
 
-      // Clear temporary schedule after successful save
-      clearWeeklySchedule();
+      // Clear all temporary assignments after successful save
+      clearAllAssignments();
+      
+      // Clear localStorage as well
+      localStorage.removeItem(TEMPORARY_ASSIGNMENTS_KEY);
+
+      console.log('Weekly schedule saved successfully');
       return true;
     } catch (error) {
-      console.error('Failed to save weekly schedule:', error);
+      console.error('Error saving weekly schedule:', error);
       return false;
     }
+  };
+
+  // Persist assignments to localStorage whenever they change
+  useEffect(() => {
+    saveAssignmentsToStorage(assignments);
+  }, [assignments]);
+
+  const value: TemporaryScheduleContextType = {
+    assignments,
+    summary,
+    getAssignmentsForDate,
+    updateAssignment,
+    clearAssignmentsForDate,
+    clearAllAssignments,
+    hasAssignmentsForDate,
+    canSaveWeeklySchedule,
+    saveWeeklySchedule
   };
 
   return (
-    <TemporaryScheduleContext.Provider value={{
-      weeklySchedule,
-      summary,
-      saveDailySchedule,
-      getDailySchedule,
-      clearWeeklySchedule,
-      canSaveWeeklySchedule,
-      saveWeeklySchedule
-    }}>
+    <TemporaryScheduleContext.Provider value={value}>
       {children}
     </TemporaryScheduleContext.Provider>
   );

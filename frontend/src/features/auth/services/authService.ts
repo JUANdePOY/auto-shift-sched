@@ -20,12 +20,12 @@ class AuthService {
 
       const data = await response.json();
 
-      // Store token and user in localStorage
+      // Store token and user in sessionStorage
       if (data.token) {
-        localStorage.setItem('authToken', data.token);
+        sessionStorage.setItem('authToken', data.token);
       }
       if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
+        sessionStorage.setItem('user', JSON.stringify(data.user));
       }
 
       return data;
@@ -49,9 +49,9 @@ class AuthService {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Always clear local storage
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
+      // Always clear session storage
+      sessionStorage.removeItem('authToken');
+      sessionStorage.removeItem('user');
     }
   }
 
@@ -75,7 +75,7 @@ class AuthService {
       }
 
       const user = await response.json();
-      localStorage.setItem('user', JSON.stringify(user));
+      sessionStorage.setItem('user', JSON.stringify(user));
       return user;
     } catch (error) {
       console.error('Get current user error:', error);
@@ -84,11 +84,11 @@ class AuthService {
   }
 
   getToken(): string | null {
-    return localStorage.getItem('authToken');
+    return sessionStorage.getItem('authToken');
   }
 
   getStoredUser(): User | null {
-    const userStr = localStorage.getItem('user');
+    const userStr = sessionStorage.getItem('user');
     return userStr ? JSON.parse(userStr) : null;
   }
 

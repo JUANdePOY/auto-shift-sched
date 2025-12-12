@@ -9,12 +9,11 @@ import { Badge } from '../../shared/components/ui/badge';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../shared/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '../../shared/components/ui/radio-group';
-import { RefreshCw, Lock, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../shared/components/ui/tabs';
+import { RefreshCw, Lock, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AdminAvailabilitySubmission, AvailabilityStatus } from '../types/availability';
 import type { Department } from '../../shared/types';
-
-
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../shared/components/ui/dialog';
 
 
@@ -49,6 +48,15 @@ const getCurrentWeekStart = () => {
 const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+const formatTimeToAMPM = (time: string) => {
+  if (!time) return time;
+  const [hours, minutes] = time.split(':');
+  const hour = parseInt(hours);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return `${displayHour}:${minutes} ${ampm}`;
+};
+
 const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart }) => {
   const [weekStart, setWeekStart] = useState<string>(getMondayOfWeek(initialWeekStart || getCurrentWeekStart()));
   const [allSubmissions, setAllSubmissions] = useState<AdminAvailabilitySubmission[]>([]);
@@ -62,9 +70,10 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
   const [departments, setDepartments] = useState<Department[]>([]);
 
   const [editingSubmission, setEditingSubmission] = useState<AdminAvailabilitySubmission | null>(null);
-  const [editingDay, setEditingDay] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editAvailability, setEditAvailability] = useState<Record<string, { type: 'not_available' | 'anytime' | 'specific'; preferredStart?: string; preferredEnd?: string }>>({});
+  const [activeEditTab, setActiveEditTab] = useState<string>('monday');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     loadAllSubmissions();
@@ -140,51 +149,63 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
     }
   };
 
-  const handleEdit = (submission: AdminAvailabilitySubmission, day: string) => {
+  const handleEdit = (submission: AdminAvailabilitySubmission) => {
     setEditingSubmission(submission);
-    setEditingDay(day);
-    const dayAvail = submission.availability[day];
-    const isAvailable = dayAvail?.available || false;
-    const hasTimes = dayAvail?.preferredStart || dayAvail?.preferredEnd;
-    let type: 'not_available' | 'anytime' | 'specific';
-    if (!isAvailable) {
-      type = 'not_available';
-    } else if (!hasTimes) {
-      type = 'anytime';
-    } else {
-      type = 'specific';
-    }
-    setEditAvailability({
-      [day]: {
+
+    const initialEditAvailability: Record<string, { type: 'not_available' | 'anytime' | 'specific'; preferredStart?: string; preferredEnd?: string }> = {};
+
+    daysOfWeek.forEach((dayKey) => {
+      const dayAvail = submission.availability[dayKey];
+      const isAvailable = dayAvail?.available || false;
+      const hasTimes = dayAvail?.preferredStart || dayAvail?.preferredEnd;
+      let type: 'not_available' | 'anytime' | 'specific';
+
+      if (!isAvailable) {
+        type = 'not_available';
+      } else if (!hasTimes) {
+        type = 'anytime';
+      } else {
+        type = 'specific';
+      }
+
+      initialEditAvailability[dayKey] = {
         type,
         preferredStart: dayAvail?.preferredStart || '',
         preferredEnd: dayAvail?.preferredEnd || ''
-      }
+      };
     });
+
+    setEditAvailability(initialEditAvailability);
+    setActiveEditTab('monday');
     setIsEditModalOpen(true);
   };
 
   const handleSaveEdit = async () => {
-    if (!editingSubmission || !editingDay) return;
-    const dayAvail = editAvailability[editingDay];
-    const available = dayAvail.type !== 'not_available';
-    const availability: Record<string, { available: boolean; preferredStart?: string; preferredEnd?: string }> = {
-      [editingDay]: {
+    if (!editingSubmission) return;
+
+    const availability: Record<string, { available: boolean; preferredStart?: string; preferredEnd?: string }> = {};
+    Object.entries(editAvailability).forEach(([dayKey, dayAvail]) => {
+      const available = dayAvail.type !== 'not_available';
+      availability[dayKey] = {
         available,
         ...(available && dayAvail.type === 'specific' && {
-          preferredStart: dayAvail.preferredStart || undefined,
-          preferredEnd: dayAvail.preferredEnd || undefined
+          preferredStart: dayAvail.preferredStart && dayAvail.preferredStart.trim() ? dayAvail.preferredStart : undefined,
+          preferredEnd: dayAvail.preferredEnd && dayAvail.preferredEnd.trim() ? dayAvail.preferredEnd : undefined
         })
-      }
-    };
+      };
+    });
+
+    setIsSaving(true);
     try {
       await availabilityService.adminSubmitAvailability(editingSubmission.employeeId, weekStart, availability);
-      toast.success('Availability updated successfully');
+      toast.success('Availability updated successfully for all days');
       loadAllSubmissions();
       setIsEditModalOpen(false);
     } catch (error) {
       console.error('Error updating availability:', error);
       toast.error('Failed to update availability');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -308,22 +329,23 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
                     {daysOfWeek.map((day) => {
                       const dayAvail = submission.availability[day];
                       const isAvailable = dayAvail?.available || false;
-                      const start = dayAvail?.startTime || dayAvail?.preferredStart || 'Any';
-                      const end = dayAvail?.endTime || dayAvail?.preferredEnd || 'Any';
+                      const start = dayAvail?.startTime || (dayAvail?.preferredStart && dayAvail.preferredStart.trim() ? dayAvail.preferredStart : undefined);
+                      const end = dayAvail?.endTime || (dayAvail?.preferredEnd && dayAvail.preferredEnd.trim() ? dayAvail.preferredEnd : undefined);
+                      const timeDisplay = start && end ? `${formatTimeToAMPM(start)} - ${formatTimeToAMPM(end)}` : start ? `${formatTimeToAMPM(start)} onwards` : end ? `until ${formatTimeToAMPM(end)}` : 'Anytime';
                       const cellClass = isAvailable
                         ? 'bg-green-100 border-green-300 hover:bg-green-200'
                         : 'bg-destructive/10 border-destructive/30 hover:bg-destructive/20';
                       return (
                         <div
                           key={day}
-                          className={`p-1 border text-center cursor-pointer ${cellClass}`}
-                          onClick={() => handleEdit(submission, day)}
-                          title={isAvailable ? `${start} - ${end}` : 'Unavailable'}
+                          className={`p-1 border text-center cursor-pointer transition-colors ${cellClass}`}
+                          onClick={() => handleEdit(submission)}
+                          title={isAvailable ? timeDisplay : 'Unavailable - Click to edit'}
                         >
                           {isAvailable ? (
-                            <div className="flex flex-col items-center">
-                              <CheckCircle className="w-4 h-4 text-green-600" />
-                              <span className="text-xs text-green-700 mt-1">{start} - {end}</span>
+                            <div className="flex flex-col items-center gap-0.5">
+                              <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                              <span className="text-xs text-green-700 leading-tight whitespace-nowrap">{timeDisplay}</span>
                             </div>
                           ) : (
                             <XCircle className="w-4 h-4 text-destructive mx-auto" />
@@ -343,72 +365,155 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
         </CardContent>
       </Card>
 
-      {isEditModalOpen && editingSubmission && editingDay && (
+      {isEditModalOpen && editingSubmission && (
         <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Availability for {editingSubmission.employeeName} - {dayNames[daysOfWeek.indexOf(editingDay)]}</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-blue-600" />
+                Edit Weekly Availability
+              </DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                {editingSubmission.employeeName} • {editingSubmission.department}
+              </p>
             </DialogHeader>
+
             <div className="space-y-4">
-              {(() => {
-                const dayAvail = editAvailability[editingDay];
-                return (
-                  <div className="space-y-2">
-                    <div className="space-y-3">
-                      <Label>{dayNames[daysOfWeek.indexOf(editingDay)]}</Label>
-                      <RadioGroup value={dayAvail.type} onValueChange={(value) => setEditAvailability(prev => ({
-                        ...prev,
-                        [editingDay]: { ...prev[editingDay], type: value as 'not_available' | 'anytime' | 'specific' }
-                      }))}>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="not_available" id={`${editingDay}-not_available`} />
-                          <Label htmlFor={`${editingDay}-not_available`}>Not Available</Label>
+              {/* Info Box */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-blue-800">
+                  Edit availability for all days of the week. Your changes will be saved when you click Save.
+                </p>
+              </div>
+
+              {/* Tabs for each day */}
+              <Tabs value={activeEditTab} onValueChange={setActiveEditTab} className="w-full">
+                <TabsList className="grid grid-cols-7 w-full h-auto gap-1 p-1 bg-muted">
+                  {daysOfWeek.map((day) => (
+                    <TabsTrigger 
+                      key={day} 
+                      value={day}
+                      className="text-xs px-2 py-1.5 data-[state=active]:bg-white"
+                    >
+                      {day.slice(0, 3).toUpperCase()}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                {/* Day Content */}
+                {daysOfWeek.map((dayKey) => {
+                  const dayAvail = editAvailability[dayKey];
+                  const dayIndex = daysOfWeek.indexOf(dayKey);
+            
+                  return (
+                    <TabsContent key={dayKey} value={dayKey} className="space-y-4 mt-4">
+                      <h3 className="font-semibold text-lg">{dayNames[dayIndex]}</h3>
+                
+                      {/* Availability Type Options */}
+                      <RadioGroup 
+                        value={dayAvail.type} 
+                        onValueChange={(value) => setEditAvailability(prev => ({
+                          ...prev,
+                          [dayKey]: { ...prev[dayKey], type: value as 'not_available' | 'anytime' | 'specific' }
+                        }))}
+                        className="space-y-3"
+                      >
+                        {/* Not Available */}
+                        <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
+                          <RadioGroupItem value="not_available" id={`${dayKey}-not_available`} className="mt-1" />
+                          <div className="flex-1">
+                            <Label htmlFor={`${dayKey}-not_available`} className="cursor-pointer font-medium">
+                              Not Available
+                            </Label>
+                            <p className="text-sm text-muted-foreground">Employee will not work on this day</p>
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="anytime" id={`${editingDay}-anytime`} />
-                          <Label htmlFor={`${editingDay}-anytime`}>Available Anytime</Label>
+
+                        {/* Anytime */}
+                        <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
+                          <RadioGroupItem value="anytime" id={`${dayKey}-anytime`} className="mt-1" />
+                          <div className="flex-1">
+                            <Label htmlFor={`${dayKey}-anytime`} className="cursor-pointer font-medium">
+                              Available Anytime
+                            </Label>
+                            <p className="text-sm text-muted-foreground">Flexible hours throughout the day</p>
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="specific" id={`${editingDay}-specific`} />
-                          <Label htmlFor={`${editingDay}-specific`}>Specific Time</Label>
+
+                        {/* Specific Times */}
+                        <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
+                          <RadioGroupItem value="specific" id={`${dayKey}-specific`} className="mt-1" />
+                          <div className="flex-1">
+                            <Label htmlFor={`${dayKey}-specific`} className="cursor-pointer font-medium block mb-2">
+                              Specific Times
+                            </Label>
+                            {dayAvail.type === 'specific' && (
+                              <div className="grid grid-cols-2 gap-3 ml-6">
+                                <div>
+                                  <Label htmlFor={`${dayKey}-start`} className="text-xs text-muted-foreground block mb-1.5">
+                                    Start Time
+                                  </Label>
+                                  <Input
+                                    id={`${dayKey}-start`}
+                                    type="time"
+                                    value={dayAvail.preferredStart || ''}
+                                    onChange={(e) => setEditAvailability(prev => ({
+                                      ...prev,
+                                      [dayKey]: { ...prev[dayKey], preferredStart: e.target.value || '' }
+                                    }))}
+                                    className="h-9 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor={`${dayKey}-end`} className="text-xs text-muted-foreground block mb-1.5">
+                                    End Time
+                                  </Label>
+                                  <Input
+                                    id={`${dayKey}-end`}
+                                    type="time"
+                                    value={dayAvail.preferredEnd || ''}
+                                    onChange={(e) => setEditAvailability(prev => ({
+                                      ...prev,
+                                      [dayKey]: { ...prev[dayKey], preferredEnd: e.target.value || '' }
+                                    }))}
+                                    className="h-9 text-sm"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </RadioGroup>
-                    </div>
-                    {dayAvail.type === 'specific' && (
-                      <div className="ml-6 space-y-2">
-                        <div>
-                          <Label htmlFor={`${editingDay}-start`}>Preferred Start Time</Label>
-                          <Input
-                            id={`${editingDay}-start`}
-                            type="time"
-                            value={dayAvail.preferredStart || ''}
-                            onChange={(e) => setEditAvailability(prev => ({
-                              ...prev,
-                              [editingDay]: { ...prev[editingDay], preferredStart: e.target.value || undefined }
-                            }))}
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor={`${editingDay}-end`}>Preferred End Time</Label>
-                          <Input
-                            id={`${editingDay}-end`}
-                            type="time"
-                            value={dayAvail.preferredEnd || ''}
-                            onChange={(e) => setEditAvailability(prev => ({
-                              ...prev,
-                              [editingDay]: { ...prev[editingDay], preferredEnd: e.target.value || undefined }
-                            }))}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
-                <Button onClick={handleSaveEdit}>Save</Button>
-              </div>
+                    </TabsContent>
+                  );
+                })}
+              </Tabs>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsEditModalOpen(false)}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSaveEdit}
+                disabled={isSaving}
+                className="gap-2"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Saving...
+                  </>
+                ) : (
+                  <>Save All Changes</>
+                )}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
