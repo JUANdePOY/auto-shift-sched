@@ -40,7 +40,6 @@ export function useSchedule() {
 
   const fetchSchedule = useCallback(async (weekStart: string = getCurrentWeekStart()) => {
     if (lastFetchedWeekRef.current === weekStart) {
-      console.log('Already fetched for this week, skipping');
       return;
     }
     lastFetchedWeekRef.current = weekStart;
@@ -48,12 +47,10 @@ export function useSchedule() {
     try {
       setLoading(true);
       setError(null);
-      console.log('📡 Fetching schedule for week:', weekStart);
 
       const fetchedSchedule = await getWeeklySchedule(weekStart);
       setSchedule(fetchedSchedule);
 
-      console.log('✅ Schedule fetched successfully');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch schedule';
       setError(errorMessage);
@@ -130,7 +127,6 @@ export function useSchedule() {
 
   const fetchFinalScheduleForWeek = useCallback(async (weekStart: string) => {
     if (lastFetchedFinalWeekRef.current === weekStart) {
-      console.log('Already fetched final schedule for this week, skipping');
       return;
     }
     lastFetchedFinalWeekRef.current = weekStart;

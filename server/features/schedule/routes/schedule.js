@@ -123,26 +123,20 @@ router.post('/generate', async (req, res, next) => {
 
 // POST suggest employees for a shift
 router.post('/suggest-employee', async (req, res, next) => {
-  console.log('[BACKEND DEBUG] /suggest-employee endpoint called with:', req.body);
   const { shiftId, date } = req.body;
 
   if (!shiftId) {
-    console.log('[BACKEND DEBUG] Missing shiftId');
     return res.status(400).json({ error: 'shiftId is required' });
   }
 
   if (!date) {
-    console.log('[BACKEND DEBUG] Missing date');
     return res.status(400).json({ error: 'date is required' });
   }
 
   try {
-    console.log('[BACKEND DEBUG] Calling SuggestionEngine.getEmployeeSuggestions');
     const suggestions = await SuggestionEngine.getEmployeeSuggestions(shiftId, date);
-    console.log('[BACKEND DEBUG] Returning suggestions:', suggestions);
     res.json(suggestions);
   } catch (error) {
-    console.log('[BACKEND DEBUG] Error in suggest-employee endpoint:', error.message);
     next(error);
   }
 });

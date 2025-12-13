@@ -26,21 +26,11 @@ class SuggestionEngine {
    */
   async getEmployeeSuggestions(shiftId, date, count = 5) {
     try {
-      console.log(`[DEBUG] Getting suggestions for shift ${shiftId} on date ${date}`);
-
       // Get shift details
       const shift = await this.getShift(shiftId);
       if (!shift) {
         throw new Error('Shift not found');
       }
-
-      console.log(`[DEBUG] Shift details:`, {
-        id: shift.id,
-        title: shift.title,
-        requiredStation: shift.requiredStation,
-        startTime: shift.startTime,
-        endTime: shift.endTime
-      });
 
       // Set the date on the shift object since shifts are templates without dates
       shift.date = date;
@@ -51,9 +41,6 @@ class SuggestionEngine {
         ? await this.getEmployeesByStation(shift.requiredStation)
         : await this.getEmployees();
 
-      console.log(`[DEBUG] Found ${employees.length} employees to consider`);
-      console.log(`[DEBUG] Employee stations:`, employees.map(e => ({ id: e.id, name: e.name, station: e.station })));
-
       // Get past week assignments for workload balancing
       const pastWeekAssignments = await this.getPastWeekAssignments(weekStart);
       const currentWeekAssignments = await this.getCurrentWeekAssignments(weekStart, date);
@@ -61,8 +48,6 @@ class SuggestionEngine {
       // Filter available employees asynchronously checking availability for exact date and time
       const availableEmployees = [];
       for (const employee of employees) {
-        console.log(`[DEBUG] Checking employee ${employee.id} (${employee.name})`);
-
         // Check availability for exact shift date and time using availabilityService
         const availabilityCheck = await availabilityService.checkEmployeeAvailability(
           employee.id,
@@ -71,37 +56,28 @@ class SuggestionEngine {
           shift.endTime
         );
 
-        console.log(`[DEBUG] Availability check for ${employee.name}:`, availabilityCheck);
-
         // Check if availability available (preferred time matching is bonus, not requirement)
         if (!availabilityCheck.available) {
-          console.log(`[DEBUG] Skipping ${employee.name} - not available`);
           continue;
         }
 
         // Check if employee has any matching stations (more inclusive for suggestions)
         if (shift.requiredStation && shift.requiredStation.length > 0) {
           const hasAnyMatchingStation = this.hasAnyMatchingStation(employee, shift.requiredStation);
-          console.log(`[DEBUG] Station match for ${employee.name}: ${hasAnyMatchingStation} (required: ${shift.requiredStation})`);
           if (!hasAnyMatchingStation) {
-            console.log(`[DEBUG] Skipping ${employee.name} - no station match`);
             continue;
           }
         }
 
         // Check if employee already assigned to this specific shift
         if (shift.assignedEmployees && shift.assignedEmployees.includes(employee.id.toString())) {
-          console.log(`[DEBUG] Skipping ${employee.name} - already assigned to this shift`);
           continue;
         }
 
         // Check if employee is already assigned to any shift on this date
         if (await this.isEmployeeAlreadyAssigned(employee.id, shift.date)) {
-          console.log(`[DEBUG] Skipping ${employee.name} - already assigned on this date`);
           continue;
         }
-
-        console.log(`[DEBUG] ${employee.name} passed all filters - adding to available employees`);
 
         // Mark availability details and workload data on the employee for scoring
         employee.availabilitySubmitted = availabilityCheck.available;
@@ -113,7 +89,7 @@ class SuggestionEngine {
         availableEmployees.push(employee);
       }
 
-      console.log(`[DEBUG] Final available employees: ${availableEmployees.length}`, availableEmployees.map(e => ({ id: e.id, name: e.name })));
+
 
       // Sort employees by workload (prioritize those with less hours last week)
       availableEmployees.sort((a, b) => {
