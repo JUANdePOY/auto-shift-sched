@@ -1,9 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import type { AISuggestion, Employee } from '../../shared/types';
-import { getEmployeeSuggestions, getTopUnassignedSuggestions } from '../../schedule/services/scheduleService';
-import {
-  getAvailableEmployeesForShift
-} from '../utils/suggestionUtils';
+import { getAvailableEmployeesForShift } from '../utils/suggestionUtils';
+import { getEmployeeSuggestions } from '../../schedule/services/scheduleService';
 
 interface UseAISuggestionsProps {
   shiftId?: string;
@@ -13,6 +11,8 @@ interface UseAISuggestionsProps {
   shiftTime?: string;
   shiftEndTime?: string;
   employeeCurrentHours?: Record<string, number>;
+  finalSchedule?: any[];
+  assignedEmployeeIds?: string[];
 }
 
 export function useAISuggestions({
@@ -22,7 +22,9 @@ export function useAISuggestions({
   shiftDate,
   shiftTime,
   shiftEndTime,
-  employeeCurrentHours = {}
+  employeeCurrentHours = {},
+  finalSchedule = [],
+  assignedEmployeeIds = []
 }: UseAISuggestionsProps) {
   const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
   const [shiftSuggestions, setShiftSuggestions] = useState<AISuggestion[]>([]);
@@ -38,38 +40,34 @@ export function useAISuggestions({
     );
   }, [availableEmployees, shiftDate, shiftTime, shiftEndTime]);
 
-  // Fetch suggestions from backend when shiftId and shiftDate are available
+  // Generate suggestions using backend API when shiftId and shiftDate are available
   useEffect(() => {
     const fetchSuggestions = async () => {
       if (!shiftId || !shiftDate) {
         setShiftSuggestions([]);
         return;
       }
-
       setIsLoading(true);
       try {
-        const suggestions = await getEmployeeSuggestions(shiftId, shiftDate);
+        // Use backend API to get employee suggestions
+        const backendSuggestions = await getEmployeeSuggestions(shiftId, shiftDate);
+
         // Convert backend response to AISuggestion format
-        const formattedSuggestions: AISuggestion[] = suggestions.map((suggestion, index) => ({
+        const suggestions: AISuggestion[] = backendSuggestions.map((suggestion, index) => ({
           id: `backend-suggestion-${shiftId}-${index}`,
           type: 'assignment',
-          title: `AI Recommendation: ${suggestion.employee.name}`,
-          description: `${suggestion.employee.name} is recommended based on skill matching, availability, and workload balance.`,
-          confidence: Math.min(95, Math.round(suggestion.score * 0.95)), // Convert score to confidence percentage
-          impact: {
-            efficiency: Math.round(suggestion.score * 0.3),
-            satisfaction: Math.round(suggestion.score * 0.25),
-            coverage: Math.round(suggestion.score * 0.35)
-          },
+          title: index === 0 ? `Best Match: ${suggestion.employee.name}` : `Alternative: ${suggestion.employee.name}`,
+          description: `${suggestion.employee.name} - ${suggestion.reasons.join(', ')}`,
+          confidence: suggestion.score,
+          reasons: suggestion.reasons,
           action: {
             type: 'assign',
             shiftId: shiftId,
-            employeeId: suggestion.employee.id,
-            employeeName: suggestion.employee.name
-          },
-          reasons: suggestion.reasons // Add reasons to the suggestion object
+            employeeId: suggestion.employee.id.toString()
+          }
         }));
-        setShiftSuggestions(formattedSuggestions);
+
+        setShiftSuggestions(suggestions);
       } catch (error) {
         console.error('Failed to fetch AI suggestions:', error);
         setShiftSuggestions([]);
@@ -95,11 +93,6 @@ export function useAISuggestions({
           title: `Quick Assign: ${employee.name}`,
           description: `Direct assignment of ${employee.name} to this shift.`,
           confidence: 90,
-          impact: {
-            efficiency: 20,
-            satisfaction: 15,
-            coverage: 25
-          },
           action: {
             type: 'assign',
             shiftId: shiftId,

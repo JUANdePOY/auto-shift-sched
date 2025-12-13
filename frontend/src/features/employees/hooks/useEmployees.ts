@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { getAllEmployees, createEmployee, updateEmployee, deleteEmployee } from '../services/employeeService';
+import { getAllEmployees, getAllEmployeesIncludingAdmins, createEmployee, updateEmployee, deleteEmployee } from '../services/employeeService';
 import type { Employee } from '../../shared/types';
 import { createAppError, logError, shouldShowErrorToUser } from '../../shared/utils/errorHandler';
 
-export function useEmployees() {
+export function useEmployees(includeAdmins: boolean = false) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -13,7 +13,9 @@ export function useEmployees() {
     try {
       setLoading(true);
       setError(null);
-      const fetchedEmployees = await getAllEmployees();
+      const fetchedEmployees = includeAdmins 
+        ? await getAllEmployeesIncludingAdmins()
+        : await getAllEmployees();
       setEmployees(fetchedEmployees);
     } catch (err) {
       const appError = createAppError(err, 'Failed to fetch employees');

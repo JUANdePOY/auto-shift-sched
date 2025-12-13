@@ -38,6 +38,166 @@ export const parseTime = (timeStr: string): number => {
   }
 };
 
+// Check if employee has matching station
+export const hasMatchingStation = (employee: Employee, requiredStations: string[]): boolean => {
+  if (!requiredStations || requiredStations.length === 0) return true;
+  
+  const employeeStations = Array.isArray(employee.station) 
+    ? employee.station.flat().map(s => String(s).toLowerCase().trim())
+    : String(employee.station).split(',').map(s => s.toLowerCase().trim());
+  
+  const shiftStations = requiredStations.map(s => s.toLowerCase().trim());
+  
+  return shiftStations.some(shiftStation =>
+    employeeStations.some(empStation =>
+      empStation === shiftStation || 
+      empStation.includes(shiftStation) || 
+      shiftStation.includes(empStation)
+    )
+  );
+};
+
+// Check if employee is available for shift with flexible time matching
+export const isAvailableForShift = (
+  employee: Employee,
+  shiftDate: string,
+  shiftStart: string,
+  shiftEnd: string
+): { available: boolean; timeMatch: 'perfect' | 'good' | 'partial' | 'none' } => {
+  if (!employee.availability) {
+    return { available: true, timeMatch: 'none' };
+  }
+
+  const dayOfWeek = new Date(shiftDate).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof typeof employee.availability;
+  const availability = employee.availability[dayOfWeek];
+
+  if (!availability || availability.available === false) {
+    return { available: false, timeMatch: 'none' };
+  }
+
+  const shiftStartMinutes = parseTime(shiftStart);
+  const shiftEndMinutes = parseTime(shiftEnd);
+
+  // Check timeBlocks first (more specific availability periods)
+  if (availability.timeBlocks && Array.isArray(availability.timeBlocks) && availability.timeBlocks.length > 0) {
+    // Check if shift overlaps with any time block
+    const overlappingBlocks = availability.timeBlocks.filter(block => {
+      if (!block.startTime || !block.endTime) return false;
+
+      const blockStartMinutes = parseTime(block.startTime);
+      const blockEndMinutes = parseTime(block.endTime);
+
+      // Check for overlap: shift starts before block ends AND shift ends after block starts
+      return shiftStartMinutes < blockEndMinutes && shiftEndMinutes > blockStartMinutes;
+    });
+
+    if (overlappingBlocks.length === 0) {
+      return { available: false, timeMatch: 'none' };
+    }
+
+    // Check if shift is completely within any preferred time block
+    const preferredBlocks = overlappingBlocks.filter(block => block.preferred);
+    if (preferredBlocks.length > 0) {
+      const perfectPreferredBlock = preferredBlocks.find(block => {
+        const blockStartMinutes = parseTime(block.startTime);
+        const blockEndMinutes = parseTime(block.endTime);
+        return shiftStartMinutes >= blockStartMinutes && shiftEndMinutes <= blockEndMinutes;
+      });
+
+      if (perfectPreferredBlock) {
+        return { available: true, timeMatch: 'perfect' };
+      } else {
+        return { available: true, timeMatch: 'good' };
+      }
+    }
+
+    // Check if shift is completely within any available time block
+    const completeBlocks = overlappingBlocks.filter(block => {
+      const blockStartMinutes = parseTime(block.startTime);
+      const blockEndMinutes = parseTime(block.endTime);
+      return shiftStartMinutes >= blockStartMinutes && shiftEndMinutes <= blockEndMinutes;
+    });
+
+    if (completeBlocks.length > 0) {
+      return { available: true, timeMatch: 'good' };
+    } else {
+      return { available: true, timeMatch: 'partial' };
+    }
+  }
+
+  // Fallback to legacy startTime/endTime or preferredStart/preferredEnd
+  if (availability.startTime && availability.endTime) {
+    const availStartMinutes = parseTime(availability.startTime);
+    const availEndMinutes = parseTime(availability.endTime);
+
+    // Check if shift overlaps with availability window (with 1-hour flexibility)
+    const flexibilityMinutes = 60; // 1 hour flexibility
+    const canStart = shiftStartMinutes >= (availStartMinutes - flexibilityMinutes);
+    const canEnd = shiftEndMinutes <= (availEndMinutes + flexibilityMinutes);
+
+    if (!canStart || !canEnd) {
+      return { available: false, timeMatch: 'none' };
+    }
+
+    // Determine time match quality
+    if (shiftStartMinutes >= availStartMinutes && shiftEndMinutes <= availEndMinutes) {
+      return { available: true, timeMatch: 'perfect' };
+    } else if (shiftStartMinutes >= (availStartMinutes - 30) && shiftEndMinutes <= (availEndMinutes + 30)) {
+      return { available: true, timeMatch: 'good' };
+    } else {
+      return { available: true, timeMatch: 'partial' };
+    }
+  }
+
+  // Check preferredStart/preferredEnd if available
+  if (availability.preferredStart && availability.preferredEnd) {
+    const preferredStartMinutes = parseTime(availability.preferredStart);
+    const preferredEndMinutes = parseTime(availability.preferredEnd);
+
+    // Check if shift overlaps with preferred times
+    const overlapsPreferred = shiftStartMinutes < preferredEndMinutes && shiftEndMinutes > preferredStartMinutes;
+
+    if (!overlapsPreferred) {
+      return { available: true, timeMatch: 'partial' }; // Available but not preferred
+    }
+
+    // Check if shift is completely within preferred times
+    const withinPreferred = shiftStartMinutes >= preferredStartMinutes && shiftEndMinutes <= preferredEndMinutes;
+
+    if (withinPreferred) {
+      return { available: true, timeMatch: 'perfect' };
+    } else {
+      return { available: true, timeMatch: 'good' };
+    }
+  }
+
+  // If no specific times set, consider available
+  return { available: true, timeMatch: 'none' };
+};
+
+// Calculate last week hours for an employee
+export const calculateLastWeekHours = (employeeId: string, finalSchedule: any[], currentDate: string): number => {
+  const lastWeekStart = new Date(currentDate);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const lastWeekEnd = new Date(currentDate);
+  lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+
+  const lastWeekStartStr = lastWeekStart.toISOString().split('T')[0];
+  const lastWeekEndStr = lastWeekEnd.toISOString().split('T')[0];
+
+  return finalSchedule
+    .filter(assignment => 
+      assignment.employee_id.toString() === employeeId &&
+      assignment.date >= lastWeekStartStr &&
+      assignment.date <= lastWeekEndStr
+    )
+    .reduce((total, assignment) => {
+      const start = parseTime(assignment.startTime);
+      const end = parseTime(assignment.endTime);
+      return total + ((end - start) / 60); // Convert minutes to hours
+    }, 0);
+};
+
 // Helper function to check if shift time overlaps with employee availability
 export const isTimeAvailable = (
   employee: Employee,
@@ -86,68 +246,73 @@ export const getAvailableEmployeesForShift = (
   shiftTime?: string,
   shiftEndTime?: string
 ): Employee[] => {
-  if (!shiftDate || !shiftTime || !shiftEndTime) {
-    return employees;
-  }
-
-  return employees.filter(employee =>
-    isTimeAvailable(employee, shiftDate, shiftTime, shiftEndTime)
-  );
+  // Return all employees without filtering for QuickAssign to work
+  return employees;
 };
 
-// Calculate employee score for shift assignment
+// Calculate employee score for shift assignment (enhanced version)
 export const calculateEmployeeScore = (
   employee: Employee,
   shiftDate?: string,
   shiftTime?: string,
   shiftEndTime?: string,
   requiredStations?: string[],
-  currentHours?: number
+  currentHours?: number,
+  lastWeekHours?: number
 ): number => {
   let score = 0;
 
-  // Availability match (higher for preferred times)
-  if (shiftDate && shiftTime && shiftEndTime) {
-    const dayOfWeek = new Date(shiftDate).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() as keyof typeof employee.availability;
-    const availability = employee.availability?.[dayOfWeek];
-    if (availability && availability.available) {
-      if (availability.preferredStart && availability.preferredEnd) {
-        // Check if shift time matches preferred times
-        const shiftStart = shiftTime;
-        const shiftEnd = shiftEndTime;
-        const prefStart = availability.preferredStart;
-        const prefEnd = availability.preferredEnd;
+  // Station match (40 points max)
+  if (hasMatchingStation(employee, requiredStations || [])) {
+    score += 40;
+  }
 
-        if (shiftStart === prefStart && shiftEnd === prefEnd) {
-          score += 50; // Perfect match
-        } else if (shiftStart >= prefStart && shiftEnd <= prefEnd) {
-          score += 45; // Within preferred range
-        } else if (parseTime(shiftStart) < parseTime(prefEnd) && parseTime(shiftEnd) > parseTime(prefStart)) {
-          score += 35; // Partially overlaps with preferred times
-        } else {
-          score += 30; // Has preferred times but different
-        }
-      } else {
-        score += 25; // Available but no preferences
+  // Time availability (30 points max)
+  if (shiftDate && shiftTime && shiftEndTime) {
+    const availability = isAvailableForShift(employee, shiftDate, shiftTime, shiftEndTime);
+    if (availability.available) {
+      switch (availability.timeMatch) {
+        case 'perfect': score += 30; break;
+        case 'good': score += 25; break;
+        case 'partial': score += 20; break;
+        default: score += 10;
       }
     }
   }
 
-  // Skill match (higher for exact station matches)
-  if (requiredStations && requiredStations.length > 0) {
-    const employeeStations = Array.isArray(employee.station) ? employee.station : [employee.station];
-    const matchedStations = requiredStations.filter(station =>
-      employeeStations.includes(station)
-    ).length;
-    score += (matchedStations / requiredStations.length) * SUGGESTION_CONSTANTS.SCORE_WEIGHTS.SKILL_MATCH;
+  // Current week workload balance (15 points max)
+  if (currentHours !== undefined) {
+    const currentWeekScore = Math.max(0, 15 - (currentHours / 40) * 15);
+    score += currentWeekScore;
   }
 
-  // Fairness factor (prefer employees with lower current hours - simulated workload balance)
-  const simulatedCurrentHours = currentHours ?? Math.random() * SUGGESTION_CONSTANTS.MAX_HOURS;
-  const workloadBalance = (SUGGESTION_CONSTANTS.MAX_HOURS - simulatedCurrentHours) / SUGGESTION_CONSTANTS.MAX_HOURS;
-  score += workloadBalance * SUGGESTION_CONSTANTS.SCORE_WEIGHTS.FAIRNESS;
+  // Last week workload balance (15 points max)
+  if (lastWeekHours !== undefined) {
+    const lastWeekScore = Math.max(0, 15 - (lastWeekHours / 40) * 15);
+    score += lastWeekScore;
+  }
 
   return score;
+};
+
+// Check if employee is already assigned on the same date
+export const isEmployeeAssignedOnDate = (
+  employeeId: string,
+  date: string,
+  finalSchedule: any[],
+  temporaryAssignments: any[]
+): boolean => {
+  // Check final schedule
+  const finalAssignment = finalSchedule.some(assignment => 
+    assignment.employee_id.toString() === employeeId && assignment.date === date
+  );
+  
+  // Check temporary assignments
+  const tempAssignment = temporaryAssignments.some(assignment => 
+    assignment.employeeId === employeeId && assignment.date === date
+  );
+  
+  return finalAssignment || tempAssignment;
 };
 
 // Generate AI suggestions for the specific shift using enhanced logic
@@ -158,123 +323,124 @@ export const generateShiftSuggestions = (
   shiftDate?: string,
   shiftTime?: string,
   shiftEndTime?: string,
-  employeeCurrentHours: Record<string, number> = {}
+  employeeCurrentHours: Record<string, number> = {},
+  finalSchedule: any[] = [],
+  assignedEmployeeIds: string[] = []
 ): AISuggestion[] => {
-  if (!shiftId || !availableEmployees.length) {
+  if (!shiftId || !availableEmployees.length || !shiftDate || !shiftTime || !shiftEndTime) {
     return [];
   }
 
-  const shiftSuggestions: AISuggestion[] = [];
+  // Filter employees based on strict criteria
+  const eligibleEmployees = availableEmployees.filter(employee => {
+    // Must not be already assigned on this date
+    if (assignedEmployeeIds.includes(employee.id)) {
+      return false;
+    }
 
-  // Sort employees by enhanced criteria
-  const rankedEmployees = availableEmployees.map(employee => {
-    const score = calculateEmployeeScore(
-      employee,
-      shiftDate,
-      shiftTime,
-      shiftEndTime,
-      requiredStations,
-      employeeCurrentHours[employee.id]
-    );
-    return { employee, score };
-  }).sort((a, b) => b.score - a.score);
+    // Must have matching station
+    if (!hasMatchingStation(employee, requiredStations || [])) {
+      return false;
+    }
 
-  // Best match suggestion
-  const bestMatch = rankedEmployees[0];
-  if (bestMatch) {
-    shiftSuggestions.push({
-      id: `suggestion-${shiftId}-best-match`,
-      type: 'assignment',
-      title: `Best Match: ${bestMatch.employee.name}`,
-      description: `${bestMatch.employee.name} is the optimal choice based on enhanced fairness algorithms, skill matching, and availability patterns.`,
-      confidence: Math.min(SUGGESTION_CONSTANTS.MAX_CONFIDENCE, SUGGESTION_CONSTANTS.BASE_CONFIDENCE + (bestMatch.score / 100) * SUGGESTION_CONSTANTS.CONFIDENCE_INCREMENT),
-      impact: {
-        efficiency: 28,
-        satisfaction: 25,
-        coverage: 35
-      },
-      action: {
-        type: 'assign',
-        shiftId: shiftId,
-        employeeId: bestMatch.employee.id
-      }
-    });
+    // Must be available for the shift time (with flexibility)
+    const availability = isAvailableForShift(employee, shiftDate, shiftTime, shiftEndTime);
+    return availability.available;
+  });
+
+  if (eligibleEmployees.length === 0) {
+    return [];
   }
 
-  // Alternative suggestions with enhanced reasoning
-  rankedEmployees.slice(1, 4).forEach((rankedEmp, index) => {
+  // Calculate enhanced scores for eligible employees
+  const rankedEmployees = eligibleEmployees.map(employee => {
+    const availability = isAvailableForShift(employee, shiftDate, shiftTime, shiftEndTime);
+    const currentWeekHours = employeeCurrentHours[employee.id] || 0;
+    const lastWeekHours = calculateLastWeekHours(employee.id, finalSchedule, shiftDate);
+    
+    let score = 0;
     const reasons = [];
-    if (rankedEmp.score > 50) reasons.push('strong skill match');
-    if (rankedEmp.score > 30) reasons.push('good availability');
-    if (reasons.length === 0) reasons.push('balanced option');
 
-    shiftSuggestions.push({
-      id: `suggestion-${shiftId}-alt-${index}`,
+    // Station match score (30%)
+    const stationScore = hasMatchingStation(employee, requiredStations || []) ? 30 : 0;
+    score += stationScore;
+    if (stationScore > 0) reasons.push('matches required station');
+
+    // Time availability score (25%)
+    let timeScore = 0;
+    switch (availability.timeMatch) {
+      case 'perfect': timeScore = 25; reasons.push('perfect time match'); break;
+      case 'good': timeScore = 20; reasons.push('good time availability'); break;
+      case 'partial': timeScore = 15; reasons.push('available with flexibility'); break;
+      default: timeScore = 5;
+    }
+    score += timeScore;
+
+    // Current week workload balance (25%)
+    const currentWeekScore = Math.max(0, 25 - (currentWeekHours / 40) * 25);
+    score += currentWeekScore;
+    if (currentWeekHours < 20) reasons.push('low hours this week');
+    else if (currentWeekHours < 35) reasons.push('moderate hours this week');
+
+    // Last week workload balance (20%) - prioritize those with fewer hours last week
+    const lastWeekScore = Math.max(0, 20 - (lastWeekHours / 40) * 20);
+    score += lastWeekScore;
+    if (lastWeekHours < 20) reasons.push('had light schedule last week');
+    else if (lastWeekHours < 35) reasons.push('moderate schedule last week');
+    else reasons.push('heavy schedule last week');
+
+    return {
+      employee,
+      score,
+      reasons,
+      currentWeekHours,
+      lastWeekHours,
+      timeMatch: availability.timeMatch
+    };
+  });
+
+  // Sort by score (highest first), then by last week hours (lowest first), then current week hours (lowest first)
+  rankedEmployees.sort((a, b) => {
+    if (Math.abs(a.score - b.score) < 5) { // If scores are close (within 5 points)
+      if (Math.abs(a.lastWeekHours - b.lastWeekHours) < 2) { // If last week hours are close
+        return a.currentWeekHours - b.currentWeekHours; // Prefer lower current week hours
+      }
+      return a.lastWeekHours - b.lastWeekHours; // Prefer lower last week hours
+    }
+    return b.score - a.score; // Higher score first
+  });
+
+  const suggestions: AISuggestion[] = [];
+
+  // Generate suggestions for top candidates
+  rankedEmployees.slice(0, 3).forEach((candidate, index) => {
+    const confidence = Math.max(60, Math.min(95, candidate.score + 20));
+    
+    let title = '';
+    if (index === 0) {
+      title = `Best Match: ${candidate.employee.name}`;
+    } else {
+      title = `Alternative: ${candidate.employee.name}`;
+    }
+
+    const description = `${candidate.employee.name} - ${candidate.reasons.join(', ')}`;
+
+    suggestions.push({
+      id: `suggestion-${shiftId}-${index}`,
       type: 'assignment',
-      title: `Alternative: ${rankedEmp.employee.name}`,
-      description: `${rankedEmp.employee.name} is a solid alternative with ${reasons.join(' and ')}.`,
-      confidence: Math.max(60, 80 - (index * 8)),
-      impact: {
-        efficiency: Math.max(15, 25 - (index * 3)),
-        satisfaction: Math.max(12, 20 - (index * 2)),
-        coverage: Math.max(20, 30 - (index * 3))
-      },
+      title,
+      description,
+      confidence,
+      reasons: candidate.reasons,
       action: {
         type: 'assign',
         shiftId: shiftId,
-        employeeId: rankedEmp.employee.id
+        employeeId: candidate.employee.id
       }
     });
   });
 
-  // Fairness optimization suggestion
-  if (availableEmployees.length > 2) {
-    shiftSuggestions.push({
-      id: `suggestion-${shiftId}-fairness`,
-      type: 'optimization',
-      title: 'Enhanced Fairness Optimization',
-      description: 'This assignment considers workload balance, station variety, and equal distribution across the team using advanced fairness algorithms.',
-      confidence: 82,
-      impact: {
-        efficiency: 18,
-        satisfaction: 40,
-        coverage: 25
-      },
-      action: {
-        type: 'assign',
-        shiftId: shiftId,
-        employeeId: rankedEmployees[0].employee.id
-      }
-    });
-  }
-
-  // Station variety suggestion
-  const stationVarietyEmployees = availableEmployees.filter(emp => {
-    const employeeStations = Array.isArray(emp.station) ? emp.station : [emp.station];
-    return requiredStations && requiredStations.some(station => employeeStations.includes(station));
-  });
-
-  if (stationVarietyEmployees.length > 1) {
-    shiftSuggestions.push({
-      id: `suggestion-${shiftId}-variety`,
-      type: 'optimization',
-      title: 'Station Variety Consideration',
-      description: 'Prioritizing employees for station variety to prevent skill stagnation and maintain team versatility.',
-      confidence: 75,
-      impact: {
-        efficiency: 20,
-        satisfaction: 30,
-        coverage: 22
-      },
-      action: {
-        type: 'assign',
-        shiftId: shiftId,
-        employeeId: stationVarietyEmployees[0].id
-      }
-    });
-  }
-
-  return shiftSuggestions;
+  return suggestions;
 };
 
 // Get suggestion icon based on type
@@ -291,22 +457,6 @@ export const getSuggestionIcon = (type: string) => {
   }
 };
 
-// Get confidence color class
-export const getConfidenceColor = (confidence: number) => {
-  if (confidence >= 80) return 'text-green-600';
-  if (confidence >= 60) return 'text-yellow-600';
-  return 'text-red-600';
-};
 
-// Calculate average metrics
-export const calculateAverageMetrics = (suggestions: AISuggestion[]) => {
-  if (!suggestions.length) return { efficiency: 0, confidence: 0 };
 
-  const averageEfficiency = suggestions.reduce((sum, s) => sum + s.impact.efficiency, 0) / suggestions.length;
-  const averageConfidence = suggestions.reduce((sum, s) => sum + s.confidence, 0) / suggestions.length;
 
-  return {
-    efficiency: averageEfficiency,
-    confidence: averageConfidence
-  };
-};

@@ -22,30 +22,47 @@ class SuggestionEngine {
    * @param {string} shiftId - The shift ID
    * @param {string} date - The date for the shift assignment (YYYY-MM-DD)
    * @param {number} count - Number of suggestions to return
-   * @param {string} shiftId - The shift ID
-   * @param {string} date - The date for the shift assignment (YYYY-MM-DD)
-   * @param {number} count - Number of suggestions to return
    * @returns {Promise<Array>} Ranked employee suggestions
    */
   async getEmployeeSuggestions(shiftId, date, count = 5) {
     try {
+      console.log(`[DEBUG] Getting suggestions for shift ${shiftId} on date ${date}`);
+
       // Get shift details
       const shift = await this.getShift(shiftId);
       if (!shift) {
         throw new Error('Shift not found');
       }
 
+      console.log(`[DEBUG] Shift details:`, {
+        id: shift.id,
+        title: shift.title,
+        requiredStation: shift.requiredStation,
+        startTime: shift.startTime,
+        endTime: shift.endTime
+      });
+
       // Set the date on the shift object since shifts are templates without dates
       shift.date = date;
+      const weekStart = this.getWeekStart(date);
 
       // Get employees with matching stations for better performance
-      const employees = shift.requiredStation && shift.requiredStation.length > 0 
+      const employees = shift.requiredStation && shift.requiredStation.length > 0
         ? await this.getEmployeesByStation(shift.requiredStation)
         : await this.getEmployees();
+
+      console.log(`[DEBUG] Found ${employees.length} employees to consider`);
+      console.log(`[DEBUG] Employee stations:`, employees.map(e => ({ id: e.id, name: e.name, station: e.station })));
+
+      // Get past week assignments for workload balancing
+      const pastWeekAssignments = await this.getPastWeekAssignments(weekStart);
+      const currentWeekAssignments = await this.getCurrentWeekAssignments(weekStart, date);
 
       // Filter available employees asynchronously checking availability for exact date and time
       const availableEmployees = [];
       for (const employee of employees) {
+        console.log(`[DEBUG] Checking employee ${employee.id} (${employee.name})`);
+
         // Check availability for exact shift date and time using availabilityService
         const availabilityCheck = await availabilityService.checkEmployeeAvailability(
           employee.id,
@@ -54,38 +71,63 @@ class SuggestionEngine {
           shift.endTime
         );
 
+        console.log(`[DEBUG] Availability check for ${employee.name}:`, availabilityCheck);
+
         // Check if availability available (preferred time matching is bonus, not requirement)
         if (!availabilityCheck.available) {
+          console.log(`[DEBUG] Skipping ${employee.name} - not available`);
           continue;
         }
+
         // Check if employee has any matching stations (more inclusive for suggestions)
         if (shift.requiredStation && shift.requiredStation.length > 0) {
           const hasAnyMatchingStation = this.hasAnyMatchingStation(employee, shift.requiredStation);
-          if (!hasAnyMatchingStation) continue;
+          console.log(`[DEBUG] Station match for ${employee.name}: ${hasAnyMatchingStation} (required: ${shift.requiredStation})`);
+          if (!hasAnyMatchingStation) {
+            console.log(`[DEBUG] Skipping ${employee.name} - no station match`);
+            continue;
+          }
         }
 
         // Check if employee already assigned to this specific shift
         if (shift.assignedEmployees && shift.assignedEmployees.includes(employee.id.toString())) {
+          console.log(`[DEBUG] Skipping ${employee.name} - already assigned to this shift`);
           continue;
         }
 
         // Check if employee is already assigned to any shift on this date
         if (await this.isEmployeeAlreadyAssigned(employee.id, shift.date)) {
+          console.log(`[DEBUG] Skipping ${employee.name} - already assigned on this date`);
           continue;
         }
 
-        // Mark availability details on the employee for scoring
+        console.log(`[DEBUG] ${employee.name} passed all filters - adding to available employees`);
+
+        // Mark availability details and workload data on the employee for scoring
         employee.availabilitySubmitted = availabilityCheck.available;
         employee.availabilityPreferred = availabilityCheck.preferred;
+        employee.availability = availabilityCheck.available ? 'available' : 'not_available'; // Set availability string for rotation scoring
+        employee.pastWeekHours = this.getEmployeePastWeekHours(employee.id, pastWeekAssignments);
+        employee.currentWeekHours = this.getEmployeeCurrentWeekHours(employee.id, currentWeekAssignments);
+        employee.pastWeekShiftTypes = this.getEmployeePastWeekShiftTypes(employee.id, pastWeekAssignments);
         availableEmployees.push(employee);
       }
 
-      // Rank employees by suitability
+      console.log(`[DEBUG] Final available employees: ${availableEmployees.length}`, availableEmployees.map(e => ({ id: e.id, name: e.name })));
+
+      // Sort employees by workload (prioritize those with less hours last week)
+      availableEmployees.sort((a, b) => {
+        const aTotal = (a.pastWeekHours || 0) + (a.currentWeekHours || 0);
+        const bTotal = (b.pastWeekHours || 0) + (b.currentWeekHours || 0);
+        return aTotal - bTotal; // Lower hours first
+      });
+
+      // Rank employees by suitability with enhanced scoring
       const rankedSuggestions = availableEmployees
         .map(employee => ({
           employee,
-          score: this.calculateSuitabilityScore(employee, shift),
-          reasons: this.getSuggestionReasons(employee, shift)
+          score: this.calculateEnhancedSuitabilityScore(employee, shift),
+          reasons: this.getEnhancedSuggestionReasons(employee, shift)
         }))
         .sort((a, b) => b.score - a.score)
         .slice(0, count);
@@ -107,10 +149,10 @@ class SuggestionEngine {
   }
 
   /**
-   * Get all employees without availability fetched
+   * Get all non-admin employees without availability fetched
    */
   async getEmployees() {
-    const [results] = await db.query('SELECT * FROM employees');
+    const [results] = await db.query('SELECT * FROM employees WHERE role != ?', ['admin']);
     const employees = results.map(employee => formatEmployee(employee));
     return employees;
   }
@@ -125,19 +167,26 @@ class SuggestionEngine {
       return await this.getEmployees();
     }
 
-    // Flatten and normalize station names
-    const flatStations = stations.flat().map(s => s.toLowerCase().trim());
-    
-    // Create LIKE conditions for each station
-    const likeConditions = flatStations.map(() => 'LOWER(station) LIKE ?').join(' OR ');
-    const likeParams = flatStations.map(station => `%${station}%`);
+    // Get all non-admin employees and filter in JavaScript for better station matching
+    const allEmployees = await this.getEmployees();
 
-    const [results] = await db.query(
-      `SELECT * FROM employees WHERE ${likeConditions}`,
-      likeParams
-    );
-    
-    return results.map(employee => formatEmployee(employee));
+    // Flatten and normalize required station names
+    const flatStations = stations.flat().map(s => s.toLowerCase().trim());
+
+    // Filter employees who have any of the required stations
+    const matchingEmployees = allEmployees.filter(employee => {
+      if (!employee.station || !Array.isArray(employee.station)) return false;
+
+      // Check if employee has any of the required stations (case-insensitive)
+      return employee.station.some(empStation => {
+        const normalizedEmpStation = empStation.toLowerCase().trim();
+        return flatStations.some(requiredStation =>
+          normalizedEmpStation.includes(requiredStation) || requiredStation.includes(normalizedEmpStation)
+        );
+      });
+    });
+
+    return matchingEmployees;
   }
 
   /**
@@ -149,33 +198,40 @@ class SuggestionEngine {
   }
 
   /**
-   * Calculate overall suitability score
+   * Calculate enhanced suitability score with improved workload balancing
    */
-  calculateSuitabilityScore(employee, shift) {
+  calculateEnhancedSuitabilityScore(employee, shift) {
     let score = 0;
 
-    // Station matching (40%)
+    // Station matching (35%)
     const stationMatch = StationManager.calculateSkillMatchScore(employee, shift.requiredStation || []);
-    score += (stationMatch / 100) * this.weights.skillMatch * 100;
+    score += (stationMatch / 100) * 0.35 * 100;
 
-    // Availability alignment (30%)
+    // Availability alignment (25%)
     let availabilityScore = 0.1; // Default low score if no availability
     if (employee.availabilitySubmitted && employee.availabilityPreferred !== false) {
       availabilityScore = 1.0;
     } else if (employee.availabilitySubmitted) {
       availabilityScore = 0.6;
     }
-    score += availabilityScore * this.weights.availability * 100;
+    score += availabilityScore * 0.25 * 100;
 
-    // Workload balance (20%)
-    const workloadScore = this.calculateWorkloadScore(employee);
-    score += workloadScore * this.weights.workloadBalance * 100;
+    // Enhanced workload balance (30%) - prioritize employees with fewer hours last week
+    const workloadScore = this.calculateEnhancedWorkloadScore(employee);
+    score += workloadScore * 0.30 * 100;
 
-    // Experience/performance (10%)
-    const experienceScore = this.calculateExperienceScore(employee);
-    score += experienceScore * this.weights.experience * 100;
+    // Shift type rotation bonus (10%) - encourage variety in shift types
+    const rotationScore = this.calculateShiftTypeRotationScore(employee, shift);
+    score += rotationScore * 0.10 * 100;
 
     return Math.round(score);
+  }
+
+  /**
+   * Calculate overall suitability score (legacy method)
+   */
+  calculateSuitabilityScore(employee, shift) {
+    return this.calculateEnhancedSuitabilityScore(employee, shift);
   }
 
   /**
@@ -200,14 +256,31 @@ class SuggestionEngine {
   }
 
   /**
-   * Calculate workload balance score
-   * Prefers employees with lower current utilization
+   * Calculate enhanced workload balance score
+   * Prioritizes employees with fewer hours last week, then current week
+   */
+  calculateEnhancedWorkloadScore(employee) {
+    const pastWeekHours = employee.pastWeekHours || 0;
+    const currentWeekHours = employee.currentWeekHours || 0;
+    const maxHours = employee.maxHoursPerWeek || 40;
+    
+    // Calculate utilization for both weeks
+    const pastWeekUtilization = pastWeekHours / maxHours;
+    const currentWeekUtilization = currentWeekHours / maxHours;
+    
+    // Heavily favor employees with lower past week hours (60% weight)
+    // Then consider current week hours (40% weight)
+    const pastWeekScore = 1 - Math.min(pastWeekUtilization, 1.0);
+    const currentWeekScore = 1 - Math.min(currentWeekUtilization, 0.8);
+    
+    return (pastWeekScore * 0.6) + (currentWeekScore * 0.4);
+  }
+
+  /**
+   * Calculate workload balance score (legacy method)
    */
   calculateWorkloadScore(employee) {
-    const utilization = employee.currentWeeklyHours / employee.maxHoursPerWeek;
-    
-    // Inverse relationship - lower utilization gets higher score
-    return 1 - Math.min(utilization, 0.8); // Cap utilization at 80% for scoring
+    return this.calculateEnhancedWorkloadScore(employee);
   }
 
   /**
@@ -228,9 +301,9 @@ class SuggestionEngine {
   }
 
   /**
-   * Get detailed reasons for the suggestion
+   * Get enhanced detailed reasons for the suggestion
    */
-  getSuggestionReasons(employee, shift) {
+  getEnhancedSuggestionReasons(employee, shift) {
     const reasons = [];
 
     // Station match reason
@@ -245,22 +318,62 @@ class SuggestionEngine {
 
     // Availability reason
     if (employee.availabilitySubmitted && employee.availabilityPreferred) {
-      reasons.push('Matches day availability and time in/out of shift');
+      reasons.push('Matches day availability and preferred time');
     } else if (employee.availabilitySubmitted) {
-      reasons.push('Submitted availability but not preferred time');
+      reasons.push('Available but not preferred time');
     } else {
-      reasons.push('Did not submit availability');
+      reasons.push('No availability submitted');
     }
 
-    // Workload reason
-    const utilization = employee.currentWeeklyHours / employee.maxHoursPerWeek;
-    if (utilization < 0.3) {
-      reasons.push('Underutilized - good for balance');
-    } else if (utilization < 0.6) {
-      reasons.push('Good workload balance');
+    // Enhanced workload reasons with specific hour details
+    const pastWeekHours = employee.pastWeekHours || 0;
+    const currentWeekHours = employee.currentWeekHours || 0;
+    const totalWeeklyHours = pastWeekHours + currentWeekHours;
+    
+    if (pastWeekHours < 20) {
+      reasons.push(`Had ${pastWeekHours.toFixed(1)}h last week - good for balance`);
+    } else if (pastWeekHours < 35) {
+      reasons.push(`Worked ${pastWeekHours.toFixed(1)}h last week - moderate load`);
+    } else {
+      reasons.push(`Worked ${pastWeekHours.toFixed(1)}h last week - high load`);
+    }
+    
+    if (currentWeekHours < 15) {
+      reasons.push(`Currently ${currentWeekHours.toFixed(1)}h this week - low hours`);
+    } else if (currentWeekHours < 30) {
+      reasons.push(`Currently ${currentWeekHours.toFixed(1)}h this week - moderate hours`);
+    } else {
+      reasons.push(`Currently ${currentWeekHours.toFixed(1)}h this week - high hours`);
+    }
+    
+    // Add total hours context
+    if (totalWeeklyHours < 25) {
+      reasons.push(`Total ${totalWeeklyHours.toFixed(1)}h - well below 40h limit`);
+    } else if (totalWeeklyHours < 35) {
+      reasons.push(`Total ${totalWeeklyHours.toFixed(1)}h - good workload balance`);
+    } else if (totalWeeklyHours < 40) {
+      reasons.push(`Total ${totalWeeklyHours.toFixed(1)}h - approaching full-time`);
+    } else {
+      reasons.push(`Total ${totalWeeklyHours.toFixed(1)}h - at/over 40h limit`);
+    }
+
+    // Shift type rotation reason
+    const pastShiftTypes = employee.pastWeekShiftTypes || [];
+    const shiftType = this.getShiftType(shift.startTime);
+    if (!pastShiftTypes.includes(shiftType)) {
+      reasons.push(`Good variety - hasn't worked ${shiftType} shifts recently`);
+    } else if (pastShiftTypes.filter(t => t === shiftType).length >= 3) {
+      reasons.push(`Worked many ${shiftType} shifts last week`);
     }
 
     return reasons;
+  }
+
+  /**
+   * Get detailed reasons for the suggestion (legacy method)
+   */
+  getSuggestionReasons(employee, shift) {
+    return this.getEnhancedSuggestionReasons(employee, shift);
   }
 
   /**
@@ -347,6 +460,135 @@ class SuggestionEngine {
   }
 
   /**
+   * Calculate shift type rotation score
+   * Encourages variety in shift types for employees with 'anytime' availability
+   */
+  calculateShiftTypeRotationScore(employee, shift) {
+    const pastShiftTypes = employee.pastWeekShiftTypes || [];
+    const shiftType = this.getShiftType(shift.startTime);
+    
+    // If employee has 'anytime' availability, encourage rotation
+    if (employee.availability && employee.availability.toLowerCase().includes('anytime')) {
+      const typeCount = pastShiftTypes.filter(t => t === shiftType).length;
+      
+      // Higher score for less frequent shift types
+      if (typeCount === 0) return 1.0; // Haven't worked this type recently
+      if (typeCount === 1) return 0.8; // Worked once
+      if (typeCount === 2) return 0.6; // Worked twice
+      return 0.3; // Worked 3+ times - discourage
+    }
+    
+    // Default score for employees without anytime availability
+    return 0.7;
+  }
+
+  /**
+   * Get shift type based on start time
+   */
+  getShiftType(startTime) {
+    const hour = parseInt(startTime.split(':')[0]);
+    
+    if (hour >= 5 && hour < 12) return 'opener';
+    if (hour >= 12 && hour < 17) return 'mid';
+    if (hour >= 17 && hour < 23) return 'closer';
+    return 'graveyard';
+  }
+
+  /**
+   * Get past week assignments for workload analysis
+   */
+  async getPastWeekAssignments(currentWeekStart) {
+    try {
+      const pastWeekStart = new Date(currentWeekStart);
+      pastWeekStart.setDate(pastWeekStart.getDate() - 7);
+      const pastWeekStartStr = pastWeekStart.toISOString().split('T')[0];
+      
+      const pastWeekEnd = new Date(currentWeekStart);
+      pastWeekEnd.setDate(pastWeekEnd.getDate() - 1);
+      const pastWeekEndStr = pastWeekEnd.toISOString().split('T')[0];
+
+      const [assignments] = await db.query(`
+        SELECT sa.employee_id, s.startTime, s.endTime, s.title
+        FROM schedule_assignments sa
+        JOIN shifts s ON sa.shift_id = s.id
+        WHERE sa.assignment_date BETWEEN ? AND ?
+      `, [pastWeekStartStr, pastWeekEndStr]);
+
+      return assignments;
+    } catch (error) {
+      console.error('Error fetching past week assignments:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get current week assignments for workload analysis
+   */
+  async getCurrentWeekAssignments(weekStart, currentDate) {
+    try {
+      const [assignments] = await db.query(`
+        SELECT sa.employee_id, s.startTime, s.endTime, s.title
+        FROM schedule_assignments sa
+        JOIN shifts s ON sa.shift_id = s.id
+        WHERE sa.assignment_date BETWEEN ? AND ? AND sa.assignment_date < ?
+      `, [weekStart, this.getWeekEnd(weekStart), currentDate]);
+
+      return assignments;
+    } catch (error) {
+      console.error('Error fetching current week assignments:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get employee's past week hours
+   */
+  getEmployeePastWeekHours(employeeId, pastWeekAssignments) {
+    const employeeAssignments = pastWeekAssignments.filter(a => a.employee_id === employeeId);
+    return employeeAssignments.reduce((total, assignment) => {
+      const hours = this.calculateShiftHours(assignment.startTime, assignment.endTime);
+      return total + hours;
+    }, 0);
+  }
+
+  /**
+   * Get employee's current week hours
+   */
+  getEmployeeCurrentWeekHours(employeeId, currentWeekAssignments) {
+    const employeeAssignments = currentWeekAssignments.filter(a => a.employee_id === employeeId);
+    return employeeAssignments.reduce((total, assignment) => {
+      const hours = this.calculateShiftHours(assignment.startTime, assignment.endTime);
+      return total + hours;
+    }, 0);
+  }
+
+  /**
+   * Get employee's past week shift types
+   */
+  getEmployeePastWeekShiftTypes(employeeId, pastWeekAssignments) {
+    const employeeAssignments = pastWeekAssignments.filter(a => a.employee_id === employeeId);
+    return employeeAssignments.map(assignment => this.getShiftType(assignment.startTime));
+  }
+
+  /**
+   * Calculate shift hours from start and end times
+   */
+  calculateShiftHours(startTime, endTime) {
+    const start = new Date(`1970-01-01T${startTime}`);
+    const end = new Date(`1970-01-01T${endTime}`);
+    return (end - start) / (1000 * 60 * 60); // Convert ms to hours
+  }
+
+  /**
+   * Get the end of the week for a given week start
+   */
+  getWeekEnd(weekStart) {
+    const date = new Date(weekStart);
+    date.setDate(date.getDate() + 6);
+    return date.toISOString().split('T')[0];
+  }
+
+  /**
    * Get the start of the week (Monday) for a given date
    * @param {string} dateString - Date string (YYYY-MM-DD)
    * @returns {string} Week start date string (YYYY-MM-DD)
@@ -401,5 +643,4 @@ class SuggestionEngine {
   }
 }
 
-module.exports = new SuggestionEngine();
 module.exports = new SuggestionEngine();

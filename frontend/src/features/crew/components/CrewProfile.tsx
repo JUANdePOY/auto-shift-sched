@@ -194,7 +194,7 @@ export function CrewProfile({ profile, stats, employeeId, upcomingShifts = [] }:
                 Logout
               </Button>
             </div>
-
+                
             {showPasswordForm && (
               <div className="mt-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
                 <form onSubmit={handlePasswordChange} className="space-y-4">

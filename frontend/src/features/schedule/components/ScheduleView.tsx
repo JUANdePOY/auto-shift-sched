@@ -252,8 +252,9 @@ export function ScheduleView({
         <ShiftAssignmentPanel
           isOpen={isAssignmentPanelOpen}
           onClose={() => setIsAssignmentPanelOpen(false)}
-          selectedDate={selectedDateForAssignment}
-          onSave={handleSaveFinalSchedule}
+          date={selectedDateForAssignment}
+          employees={employees}
+          onSaveFinalSchedule={handleSaveFinalSchedule}
         />
       )}
     </div>

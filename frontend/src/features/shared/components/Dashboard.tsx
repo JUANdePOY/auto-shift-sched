@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Badge } from '../../shared/components/ui/badge';
 import { Progress } from '../../shared/components/ui/progress';
 import { Button } from '../../shared/components/ui/button';
-import { CalendarDays, Users, Target, AlertTriangle, Clock, TrendingUp, Building2 } from 'lucide-react';
+import { CalendarDays, Users, Target, AlertTriangle, Clock, TrendingUp, Building2, BarChart3 } from 'lucide-react';
 import { availabilityService } from '../../availability/services/availabilityService';
 import { dashboardService } from '../../shared/services/dashboardService';
 import { useState, useEffect } from 'react';
@@ -117,107 +117,83 @@ export function Dashboard({ schedule, employees, onViewSchedule }: DashboardProp
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1>Shift Scheduling Dashboard</h1>
-          <p className="text-muted-foreground">
-            Week of {weekStartDate.toLocaleDateString('en-US', { 
-              month: 'long', 
-              day: 'numeric', 
-              year: 'numeric' 
-            })}
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <Button onClick={onViewSchedule}>
-            <CalendarDays className="w-4 h-4 mr-2" />
+      {/* Enhanced Header */}
+      <div className="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 rounded-2xl p-8 border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+              <BarChart3 className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                Dashboard Overview
+              </h1>
+              <p className="text-slate-600 mt-1 text-lg">
+                Week of {weekStartDate.toLocaleDateString('en-US', { 
+                  month: 'long', 
+                  day: 'numeric', 
+                  year: 'numeric' 
+                })}
+              </p>
+            </div>
+          </div>
+          
+          <Button
+            onClick={onViewSchedule}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
+          >
+            <CalendarDays className="w-5 h-5 mr-2" />
             View Schedule
           </Button>
         </div>
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        <Card className="transition-all hover:shadow-lg hover:scale-105 cursor-pointer">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">Schedule Coverage</CardTitle>
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card className="transition-all hover:shadow-lg hover:-translate-y-1 duration-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium">Schedule Coverage</CardTitle>
+            <CalendarDays className="h-5 w-5 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{coverage}%</div>
-            <Progress value={coverage} className="mt-2" />
-            <p className="text-xs text-muted-foreground mt-2">
+            <div className="text-3xl font-bold text-slate-900">{coverage}%</div>
+            <Progress value={coverage} className="mt-3 h-2" />
+            <p className="text-xs text-slate-600 mt-3">
               {weekSummary?.coveredShifts ?? 0} of {weekSummary?.totalShifts ?? 0} shifts covered
             </p>
           </CardContent>
         </Card>
 
-        <Card className="transition-all hover:shadow-lg hover:scale-105 cursor-pointer">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">Schedule Efficiency</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
+        <Card className="transition-all hover:shadow-lg hover:-translate-y-1 duration-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium">Employee Utilization</CardTitle>
+            <Users className="h-5 w-5 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{scheduleEfficiency}%</div>
-            <Progress value={scheduleEfficiency} className="mt-2" />
-            <p className="text-xs text-muted-foreground mt-2">
-              {weekSummary ? `${weekSummary.coveredShifts} of ${weekSummary.totalShifts} shifts` : 'Loading...'}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="transition-all hover:shadow-lg hover:scale-105 cursor-pointer">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">Employee Utilization</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{Math.round(utilizationPercent)}%</div>
-            <Progress value={utilizationPercent} className="mt-2" />
-            <p className="text-xs text-muted-foreground mt-2">
+            <div className="text-3xl font-bold text-slate-900">{Math.round(utilizationPercent)}%</div>
+            <Progress value={utilizationPercent} className="mt-3 h-2" />
+            <p className="text-xs text-slate-600 mt-3">
               {employeesScheduled} of {totalEmps} employees scheduled
             </p>
           </CardContent>
         </Card>
 
-        <Card className="transition-all hover:shadow-lg hover:scale-105 cursor-pointer">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">Conflicts & Alerts</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <div className="text-2xl font-bold">{conflictCount}</div>
-              {urgentCount > 0 && (
-                <Badge variant="destructive" className="text-xs">
-                  {urgentCount} urgent
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              {conflictCount - urgentCount} warnings, {urgentCount} critical issues
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Department Breakdown */}
-        <Card className="transition-all hover:shadow-lg hover:scale-105 cursor-pointer">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">Department Breakdown</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+        <Card className="transition-all hover:shadow-lg hover:-translate-y-1 duration-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium">Department Split</CardTitle>
+            <Building2 className="h-5 w-5 text-purple-500" />
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm">Service</span>
-                <span className="text-sm font-bold">
+                <span className="text-sm text-slate-600">Service</span>
+                <span className="text-lg font-bold text-slate-900">
                   {employees.filter(e => e.department === 'Service').length}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm">Production</span>
-                <span className="text-sm font-bold">
+                <span className="text-sm text-slate-600">Production</span>
+                <span className="text-lg font-bold text-slate-900">
                   {employees.filter(e => e.department === 'Production').length}
                 </span>
               </div>
@@ -225,28 +201,22 @@ export function Dashboard({ schedule, employees, onViewSchedule }: DashboardProp
           </CardContent>
         </Card>
 
-        {/* Availability Status */}
-        <Card className="transition-all hover:shadow-lg hover:scale-105 cursor-pointer">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">Next Week Availability</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+        <Card className="transition-all hover:shadow-lg hover:-translate-y-1 duration-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium">Availability Status</CardTitle>
+            <Target className="h-5 w-5 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Submitted</span>
-                <span className="text-sm font-bold">
-                  {nextWeekAvailability ? nextWeekAvailability.submissionRate : 0}%
-                </span>
-              </div>
-              <Progress
-                value={nextWeekAvailability ? nextWeekAvailability.submissionRate : 0}
-                className="mt-2"
-              />
-              <p className="text-xs text-muted-foreground mt-2">
-                {nextWeekAvailability ? nextWeekAvailability.submissions : 0} of {nextWeekAvailability ? nextWeekAvailability.totalEmployees : employees.length} employees
-              </p>
+            <div className="text-3xl font-bold text-slate-900">
+              {nextWeekAvailability ? nextWeekAvailability.submissionRate : 0}%
             </div>
+            <Progress
+              value={nextWeekAvailability ? nextWeekAvailability.submissionRate : 0}
+              className="mt-3 h-2"
+            />
+            <p className="text-xs text-slate-600 mt-3">
+              {nextWeekAvailability ? nextWeekAvailability.submissions : 0} of {nextWeekAvailability ? nextWeekAvailability.totalEmployees : employees.length} submitted
+            </p>
           </CardContent>
         </Card>
       </div>

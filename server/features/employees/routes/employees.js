@@ -4,11 +4,12 @@ const db = require('../../../shared/config/database');
 
 const router = express.Router();
 
-// Get all employees
+// Get non-admin employees (for scheduling and availability)
 router.get('/', async (req, res) => {
   try {
     const [employees] = await db.execute(
-      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, created_at, updated_at FROM employees'
+      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, status, created_at, updated_at FROM employees WHERE role != ?',
+      ['admin']
     );
 
     // Parse JSON fields and fetch availability
@@ -49,7 +50,57 @@ router.get('/', async (req, res) => {
 
     res.json(formattedEmployees);
   } catch (error) {
-    console.error('Error fetching employees:', error);
+    console.error('Error fetching non-admin employees:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get all employees (including admins) - for admin management
+router.get('/all', async (req, res) => {
+  try {
+    const [employees] = await db.execute(
+      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, status, created_at, updated_at FROM employees'
+    );
+
+    // Parse JSON fields and fetch availability
+    const formattedEmployees = await Promise.all(employees.map(async emp => {
+      let station = [];
+      if (emp.station) {
+        try {
+          station = JSON.parse(emp.station);
+        } catch (e) {
+          // If not valid JSON, treat as single station name
+          station = [emp.station];
+        }
+      }
+
+      // Fetch current week's availability from availability_submissions
+      let availability = {};
+      try {
+        const availabilityService = require('../../availability/services/availabilityService');
+        const currentWeekStart = new Date();
+        currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay() + 1); // Monday of current week
+        const weekStartStr = currentWeekStart.toISOString().split('T')[0];
+
+        const availabilityData = await availabilityService.getAvailability(emp.id, weekStartStr);
+        if (availabilityData && availabilityData.availability) {
+          availability = availabilityData.availability;
+        }
+      } catch (error) {
+        console.warn(`Could not fetch availability for employee ${emp.id}:`, error.message);
+        // Keep availability as empty object
+      }
+
+      return {
+        ...emp,
+        station,
+        availability
+      };
+    }));
+
+    res.json(formattedEmployees);
+  } catch (error) {
+    console.error('Error fetching all employees:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -59,7 +110,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const [employees] = await db.execute(
-      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, created_at, updated_at FROM employees WHERE id = ?',
+      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, status, created_at, updated_at FROM employees WHERE id = ?',
       [id]
     );
 
@@ -108,16 +159,24 @@ router.get('/:id', async (req, res) => {
 // Create new employee
 router.post('/', async (req, res) => {
   try {
-    const { name, email, password, role = 'crew', department, station, position, maxHoursPerWeek = 40, currentWeeklyHours = 0 } = req.body;
+    const { name, email, password, role = 'crew', department, station, position, maxHoursPerWeek = 40, currentWeeklyHours = 0, isActive = true } = req.body;
+    const status = isActive ? 'active' : 'inactive';
 
-    if (!name || !email) {
-      return res.status(400).json({ message: 'Name and email are required' });
+    if (!name) {
+      return res.status(400).json({ message: 'Name is required' });
     }
 
-    // Check if email already exists
-    const [existing] = await db.execute('SELECT id FROM employees WHERE email = ?', [email]);
-    if (existing.length > 0) {
-      return res.status(400).json({ message: 'Email already exists' });
+    // Email is required for admin and manager roles, optional for crew
+    if ((role === 'admin' || role === 'manager') && !email) {
+      return res.status(400).json({ message: 'Email is required for admin and manager roles' });
+    }
+
+    // Check if email already exists (only if email is provided)
+    if (email) {
+      const [existing] = await db.execute('SELECT id FROM employees WHERE email = ?', [email]);
+      if (existing.length > 0) {
+        return res.status(400).json({ message: 'Email already exists' });
+      }
     }
 
     // Set default password to employee's name if not provided
@@ -129,8 +188,8 @@ router.post('/', async (req, res) => {
 
     // Insert employee
     const [result] = await db.execute(
-      `INSERT INTO employees (name, email, password, role, department, station, position, maxHoursPerWeek, currentWeeklyHours)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO employees (name, email, password, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
         email,
@@ -140,13 +199,14 @@ router.post('/', async (req, res) => {
         station ? JSON.stringify(station) : null,
         position || null,
         maxHoursPerWeek,
-        currentWeeklyHours
+        currentWeeklyHours,
+        status
       ]
     );
 
     // Return created employee (without password)
     const [newEmployee] = await db.execute(
-      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, created_at, updated_at FROM employees WHERE id = ?',
+      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, status, created_at, updated_at FROM employees WHERE id = ?',
       [result.insertId]
     );
 
@@ -173,7 +233,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, password, role, department, station, position, maxHoursPerWeek, currentWeeklyHours } = req.body;
+    const { name, email, password, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, isActive } = req.body;
 
     // Check if employee exists
     const [existing] = await db.execute('SELECT id FROM employees WHERE id = ?', [id]);
@@ -232,7 +292,10 @@ router.put('/:id', async (req, res) => {
       updates.push('currentWeeklyHours = ?');
       values.push(currentWeeklyHours);
     }
-
+    if (isActive !== undefined) {
+      updates.push('status = ?');
+      values.push(isActive ? 'active' : 'inactive');
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ message: 'No fields to update' });
@@ -245,7 +308,7 @@ router.put('/:id', async (req, res) => {
 
     // Return updated employee
     const [updatedEmployee] = await db.execute(
-      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, created_at, updated_at FROM employees WHERE id = ?',
+      'SELECT id, name, email, role, department, station, position, maxHoursPerWeek, currentWeeklyHours, status, created_at, updated_at FROM employees WHERE id = ?',
       [id]
     );
 

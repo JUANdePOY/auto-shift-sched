@@ -14,12 +14,16 @@ interface EmployeeListProps {
   searchTerm: string;
   filterDepartment: string;
   filterStation: string;
+  filterRole: string;
+  filterStatus: string;
   sortBy: string;
   departments: Department[];
   stations: Station[];
   onSearchChange: (value: string) => void;
   onDepartmentChange: (value: string) => void;
   onStationChange: (value: string) => void;
+  onRoleChange: (value: string) => void;
+  onStatusChange: (value: string) => void;
   onSortChange: (value: string) => void;
 }
 
@@ -31,12 +35,16 @@ export function EmployeeList({
   searchTerm,
   filterDepartment,
   filterStation,
+  filterRole,
+  filterStatus,
   sortBy,
   departments,
   stations,
   onSearchChange,
   onDepartmentChange,
   onStationChange,
+  onRoleChange,
+  onStatusChange,
   onSortChange
 }: EmployeeListProps) {
   return (
@@ -83,20 +91,30 @@ export function EmployeeList({
               </SelectContent>
             </Select>
 
-            <Select value={sortBy} onValueChange={onSortChange}>
-              <SelectTrigger className="w-36 h-10">
-                <SelectValue placeholder="Sort by" />
+            <Select value={filterRole} onValueChange={onRoleChange}>
+              <SelectTrigger className="w-32 h-10">
+                <Filter className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Role" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="department">Department</SelectItem>
+                <SelectItem value="all">All Roles</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="manager">Manager</SelectItem>
+                <SelectItem value="crew">Crew</SelectItem>
               </SelectContent>
             </Select>
 
-            <Button onClick={onAddEmployee} className="h-10 bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Employee
-            </Button>
+            <Select value={filterStatus} onValueChange={onStatusChange}>
+              <SelectTrigger className="w-32 h-10">
+                <Filter className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

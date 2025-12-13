@@ -1,15 +1,15 @@
 import React from 'react';
 import { Card, CardContent } from '../../shared/components/ui/card';
-import { Brain, Target, Star } from 'lucide-react';
+import { Brain, CheckCircle, Users } from 'lucide-react';
 import type { AISuggestion } from '../../shared/types';
-import { calculateAverageMetrics } from '../utils/suggestionUtils';
 
 interface SuggestionStatsProps {
   suggestions: AISuggestion[];
 }
 
 export function SuggestionStats({ suggestions }: SuggestionStatsProps) {
-  const { efficiency, confidence } = calculateAverageMetrics(suggestions);
+  const highQualitySuggestions = suggestions.filter(s => s.confidence >= 80).length;
+  const assignmentSuggestions = suggestions.filter(s => s.type === 'assignment').length;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -18,7 +18,7 @@ export function SuggestionStats({ suggestions }: SuggestionStatsProps) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Suggestions</p>
-              <p className="text-2xl">{suggestions.length}</p>
+              <p className="text-2xl font-semibold">{suggestions.length}</p>
             </div>
             <Brain className="w-8 h-8 text-blue-600" />
           </div>
@@ -29,10 +29,10 @@ export function SuggestionStats({ suggestions }: SuggestionStatsProps) {
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Avg. Efficiency Gain</p>
-              <p className="text-2xl text-green-600">{Math.round(efficiency)}%</p>
+              <p className="text-sm text-muted-foreground">High Quality</p>
+              <p className="text-2xl font-semibold text-green-600">{highQualitySuggestions}</p>
             </div>
-            <Target className="w-8 h-8 text-green-600" />
+            <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
         </CardContent>
       </Card>
@@ -41,12 +41,10 @@ export function SuggestionStats({ suggestions }: SuggestionStatsProps) {
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Avg. Confidence</p>
-              <p className={`text-2xl ${confidence >= 80 ? 'text-green-600' : confidence >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
-                {Math.round(confidence)}%
-              </p>
+              <p className="text-sm text-muted-foreground">Assignments</p>
+              <p className="text-2xl font-semibold text-blue-600">{assignmentSuggestions}</p>
             </div>
-            <Star className="w-8 h-8 text-yellow-600" />
+            <Users className="w-8 h-8 text-blue-600" />
           </div>
         </CardContent>
       </Card>

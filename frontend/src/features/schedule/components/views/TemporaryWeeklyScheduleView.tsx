@@ -21,6 +21,7 @@ export function TemporaryWeeklyScheduleView({
   const [hoveredDay, setHoveredDay] = useState<Date | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [isScheduleLocked, setIsScheduleLocked] = useState(false);
   const { summary, canSaveWeeklySchedule, saveWeeklySchedule } = useTemporarySchedule();
 
   const handleDayClick = (dateString: string) => {
@@ -33,19 +34,14 @@ export function TemporaryWeeklyScheduleView({
       String(date.getMonth() + 1).padStart(2, '0') + '-' +
       String(date.getDate()).padStart(2, '0');
 
-    const daySchedule = summary.employeeWorkloads.length > 0 ?
-      summary.employeeWorkloads.some(workload =>
-        summary.conflicts.some(conflict =>
-          conflict.date === dateString && conflict.employeeId === workload.employeeId
-        )
-      ) : false;
+    const hasConflicts = summary.conflicts?.some(c => c.date === dateString && c.severity === 'error') || false;
+    const { hasAssignmentsForDate } = useTemporarySchedule();
+    const hasAssignmentsForDay = hasAssignmentsForDate(dateString);
 
-    const hasAssignments = summary.totalAssignments > 0;
-
-    if (daySchedule && summary.conflicts.some(c => c.date === dateString && c.severity === 'error')) {
+    if (hasConflicts) {
       return 'error';
     }
-    if (hasAssignments) {
+    if (hasAssignmentsForDay) {
       return 'completed';
     }
     return 'incomplete';
@@ -81,7 +77,7 @@ export function TemporaryWeeklyScheduleView({
             return (
               <Card
                 key={date.toISOString()}
-                className={`aspect-square cursor-pointer transition-all hover:shadow-lg hover:scale-125 relative ${hoveredDay === date ? 'z-[1]' : 'z-0'} ${selectedDate === dateString ? 'ring-2 ring-blue-500 bg-blue-50' : ''}`}
+                className={`aspect-square cursor-pointer transition-all hover:shadow-lg hover:scale-125 relative ${hoveredDay === date ? 'z-[1]' : 'z-0'} ${selectedDate === dateString ? 'ring-2 ring-blue-50 bg-blue-50' : ''}`}
                 onMouseEnter={() => setHoveredDay(date)}
                 onMouseLeave={() => setHoveredDay(null)}
                 onClick={() => handleDayClick(dateString)}
@@ -178,13 +174,14 @@ export function TemporaryWeeklyScheduleView({
               onClick={async () => {
                 const success = await saveWeeklySchedule(weekDates);
                 if (success) {
+                  setIsScheduleLocked(true);
                   onSaveWeeklySchedule();
                 }
               }}
-              disabled={!canSaveWeeklySchedule()}
-              className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!canSaveWeeklySchedule() || isScheduleLocked}
+              className={`${isScheduleLocked ? 'bg-gray-500 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              Save Weekly Schedule
+              {isScheduleLocked ? 'Schedule Locked' : 'Save Weekly Schedule'}
             </Button>
           )}
         </div>

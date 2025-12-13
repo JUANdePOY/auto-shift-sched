@@ -7,12 +7,16 @@ interface EmployeeFiltersProps {
   searchTerm: string;
   filterDepartment: string;
   filterStation: string;
+  filterRole: string;
+  filterStatus: string;
   sortBy: string;
   departments: Department[];
   stations: Station[];
   onSearchChange: (value: string) => void;
   onDepartmentChange: (value: string) => void;
   onStationChange: (value: string) => void;
+  onRoleChange: (value: string) => void;
+  onStatusChange: (value: string) => void;
   onSortChange: (value: string) => void;
 }
 
@@ -20,12 +24,16 @@ export function EmployeeFilters({
   searchTerm,
   filterDepartment,
   filterStation,
+  filterRole,
+  filterStatus,
   sortBy,
   departments,
   stations,
   onSearchChange,
   onDepartmentChange,
   onStationChange,
+  onRoleChange,
+  onStatusChange,
   onSortChange
 }: EmployeeFiltersProps) {
   return (
@@ -63,6 +71,31 @@ export function EmployeeFilters({
           {stations.map(station => (
             <SelectItem key={station.id} value={station.name}>{station.name}</SelectItem>
           ))}
+        </SelectContent>
+      </Select>
+
+      <Select value={filterRole} onValueChange={onRoleChange}>
+        <SelectTrigger>
+          <Filter className="w-4 h-4 mr-2" />
+          <SelectValue placeholder="Role" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Roles</SelectItem>
+          <SelectItem value="admin">Admin</SelectItem>
+          <SelectItem value="manager">Manager</SelectItem>
+          <SelectItem value="crew">Crew</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Select value={filterStatus} onValueChange={onStatusChange}>
+        <SelectTrigger>
+          <Filter className="w-4 h-4 mr-2" />
+          <SelectValue placeholder="Status" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Status</SelectItem>
+          <SelectItem value="active">Active</SelectItem>
+          <SelectItem value="inactive">Inactive</SelectItem>
         </SelectContent>
       </Select>
 

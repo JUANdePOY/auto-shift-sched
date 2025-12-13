@@ -8,7 +8,6 @@ import { Label } from '../../shared/components/ui/label';
 import { Badge } from '../../shared/components/ui/badge';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../shared/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '../../shared/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../shared/components/ui/tabs';
 import { RefreshCw, Lock, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -47,6 +46,13 @@ const getCurrentWeekStart = () => {
 
 const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+const getDateForDay = (weekStart: string, dayIndex: number) => {
+  const monday = new Date(weekStart);
+  const dayDate = new Date(monday);
+  dayDate.setDate(monday.getDate() + dayIndex);
+  return dayDate;
+};
 
 const formatTimeToAMPM = (time: string) => {
   if (!time) return time;
@@ -248,23 +254,25 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
               {status?.locked ? 'Locked' : 'Lock Submissions'}
             </Button>
           </div>
+          
           <div className="flex justify-center items-center gap-2">
             <Button onClick={goToPreviousWeek} variant="outline" size="sm">
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <Label htmlFor="weekStart" className="text-sm font-medium">
-              Week:
-            </Label>
-            <Input
-              id="weekStart"
-              type="date"
-              value={weekStart}
-              onChange={handleWeekChange}
-              className="w-36"
-            />
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+              <p className="text-sm font-medium text-blue-900">
+                Week Range: {(() => {
+                  const monday = new Date(weekStart);
+                  const sunday = new Date(monday);
+                  sunday.setDate(monday.getDate() + 6);
+                  return `${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${sunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                })()}
+              </p>
+            </div>
             <Button onClick={goToNextWeek} variant="outline" size="sm">
               <ChevronRight className="w-4 h-4" />
             </Button>
+            
           </div>
           <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -306,11 +314,17 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
                 {/* Day Headers */}
                 <div className="font-semibold text-center p-2 bg-muted"></div> {/* Empty corner */}
                 <div className="font-semibold text-center p-2 bg-muted border border-border">Status</div>
-                {dayNames.map((day) => (
-                  <div key={day} className="font-semibold text-center p-2 bg-muted border border-border">
-                    {day}
-                  </div>
-                ))}
+                {dayNames.map((day, index) => {
+                  const dayDate = getDateForDay(weekStart, index);
+                  return (
+                    <div key={day} className="font-semibold text-center p-2 bg-muted border border-border">
+                      <div className="text-sm">{day}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </div>
+                    </div>
+                  );
+                })}
 
                 {/* Employee Rows */}
                 {filteredSubmissions.map((submission) => (
@@ -337,7 +351,7 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
                         : 'bg-destructive/10 border-destructive/30 hover:bg-destructive/20';
                       return (
                         <div
-                          key={day}
+                          key={`${submission.employeeId}-${day}`}
                           className={`p-1 border text-center cursor-pointer transition-colors ${cellClass}`}
                           onClick={() => handleEdit(submission)}
                           title={isAvailable ? timeDisplay : 'Unavailable - Click to edit'}
@@ -410,81 +424,129 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
                     <TabsContent key={dayKey} value={dayKey} className="space-y-4 mt-4">
                       <h3 className="font-semibold text-lg">{dayNames[dayIndex]}</h3>
                 
-                      {/* Availability Type Options */}
-                      <RadioGroup 
-                        value={dayAvail.type} 
-                        onValueChange={(value) => setEditAvailability(prev => ({
-                          ...prev,
-                          [dayKey]: { ...prev[dayKey], type: value as 'not_available' | 'anytime' | 'specific' }
-                        }))}
-                        className="space-y-3"
-                      >
-                        {/* Not Available */}
-                        <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
-                          <RadioGroupItem value="not_available" id={`${dayKey}-not_available`} className="mt-1" />
-                          <div className="flex-1">
-                            <Label htmlFor={`${dayKey}-not_available`} className="cursor-pointer font-medium">
-                              Not Available
-                            </Label>
-                            <p className="text-sm text-muted-foreground">Employee will not work on this day</p>
-                          </div>
-                        </div>
-
-                        {/* Anytime */}
-                        <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
-                          <RadioGroupItem value="anytime" id={`${dayKey}-anytime`} className="mt-1" />
-                          <div className="flex-1">
-                            <Label htmlFor={`${dayKey}-anytime`} className="cursor-pointer font-medium">
-                              Available Anytime
-                            </Label>
-                            <p className="text-sm text-muted-foreground">Flexible hours throughout the day</p>
-                          </div>
-                        </div>
-
-                        {/* Specific Times */}
-                        <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
-                          <RadioGroupItem value="specific" id={`${dayKey}-specific`} className="mt-1" />
-                          <div className="flex-1">
-                            <Label htmlFor={`${dayKey}-specific`} className="cursor-pointer font-medium block mb-2">
-                              Specific Times
-                            </Label>
-                            {dayAvail.type === 'specific' && (
-                              <div className="grid grid-cols-2 gap-3 ml-6">
-                                <div>
-                                  <Label htmlFor={`${dayKey}-start`} className="text-xs text-muted-foreground block mb-1.5">
-                                    Start Time
-                                  </Label>
-                                  <Input
-                                    id={`${dayKey}-start`}
-                                    type="time"
-                                    value={dayAvail.preferredStart || ''}
-                                    onChange={(e) => setEditAvailability(prev => ({
-                                      ...prev,
-                                      [dayKey]: { ...prev[dayKey], preferredStart: e.target.value || '' }
-                                    }))}
-                                    className="h-9 text-sm"
-                                  />
-                                </div>
-                                <div>
-                                  <Label htmlFor={`${dayKey}-end`} className="text-xs text-muted-foreground block mb-1.5">
-                                    End Time
-                                  </Label>
-                                  <Input
-                                    id={`${dayKey}-end`}
-                                    type="time"
-                                    value={dayAvail.preferredEnd || ''}
-                                    onChange={(e) => setEditAvailability(prev => ({
-                                      ...prev,
-                                      [dayKey]: { ...prev[dayKey], preferredEnd: e.target.value || '' }
-                                    }))}
-                                    className="h-9 text-sm"
-                                  />
-                                </div>
+                      {/* Availability Type Options - Button Style */}
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-3 gap-3">
+                          {/* Not Available Button */}
+                          <Button
+                            type="button"
+                            variant={dayAvail.type === 'not_available' ? 'destructive' : 'outline'}
+                            className={`h-auto p-4 flex flex-col items-center gap-2 transition-all ${
+                              dayAvail.type === 'not_available' 
+                                ? 'ring-2 ring-destructive/20 shadow-md' 
+                                : 'hover:bg-destructive/5 hover:border-destructive/30'
+                            }`}
+                            onClick={() => setEditAvailability(prev => ({
+                              ...prev,
+                              [dayKey]: { ...prev[dayKey], type: 'not_available' }
+                            }))}
+                          >
+                            <XCircle className={`w-6 h-6 ${
+                              dayAvail.type === 'not_available' ? 'text-white' : 'text-destructive'
+                            }`} />
+                            <div className="text-center">
+                              <div className="font-medium text-sm">Not Available</div>
+                              <div className={`text-xs ${
+                                dayAvail.type === 'not_available' ? 'text-white/80' : 'text-muted-foreground'
+                              }`}>
+                                Won't work
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          </Button>
+
+                          {/* Available Anytime Button */}
+                          <Button
+                            type="button"
+                            variant={dayAvail.type === 'anytime' ? 'default' : 'outline'}
+                            className={`h-auto p-4 flex flex-col items-center gap-2 transition-all ${
+                              dayAvail.type === 'anytime' 
+                                ? 'ring-2 ring-primary/20 shadow-md bg-green-600 hover:bg-green-700' 
+                                : 'hover:bg-green-50 hover:border-green-300'
+                            }`}
+                            onClick={() => setEditAvailability(prev => ({
+                              ...prev,
+                              [dayKey]: { ...prev[dayKey], type: 'anytime' }
+                            }))}
+                          >
+                            <CheckCircle className={`w-6 h-6 ${
+                              dayAvail.type === 'anytime' ? 'text-white' : 'text-green-600'
+                            }`} />
+                            <div className="text-center">
+                              <div className="font-medium text-sm">Available Anytime</div>
+                              <div className={`text-xs ${
+                                dayAvail.type === 'anytime' ? 'text-white/80' : 'text-muted-foreground'
+                              }`}>
+                                Flexible hours
+                              </div>
+                            </div>
+                          </Button>
+
+                          {/* Specific Times Button */}
+                          <Button
+                            type="button"
+                            variant={dayAvail.type === 'specific' ? 'default' : 'outline'}
+                            className={`h-auto p-4 flex flex-col items-center gap-2 transition-all ${
+                              dayAvail.type === 'specific' 
+                                ? 'ring-2 ring-primary/20 shadow-md bg-blue-600 hover:bg-blue-700' 
+                                : 'hover:bg-blue-50 hover:border-blue-300'
+                            }`}
+                            onClick={() => setEditAvailability(prev => ({
+                              ...prev,
+                              [dayKey]: { ...prev[dayKey], type: 'specific' }
+                            }))}
+                          >
+                            <Clock className={`w-6 h-6 ${
+                              dayAvail.type === 'specific' ? 'text-white' : 'text-blue-600'
+                            }`} />
+                            <div className="text-center">
+                              <div className="font-medium text-sm">Specific Times</div>
+                              <div className={`text-xs ${
+                                dayAvail.type === 'specific' ? 'text-white/80' : 'text-muted-foreground'
+                              }`}>
+                                Set hours
+                              </div>
+                            </div>
+                          </Button>
                         </div>
-                      </RadioGroup>
+
+                        {/* Time Inputs for Specific Times */}
+                        {dayAvail.type === 'specific' && (
+                          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor={`${dayKey}-start`} className="text-sm font-medium text-blue-900 block mb-2">
+                                  Start Time
+                                </Label>
+                                <Input
+                                  id={`${dayKey}-start`}
+                                  type="time"
+                                  value={dayAvail.preferredStart || ''}
+                                  onChange={(e) => setEditAvailability(prev => ({
+                                    ...prev,
+                                    [dayKey]: { ...prev[dayKey], preferredStart: e.target.value || '' }
+                                  }))}
+                                  className="h-10 border-blue-300 focus:border-blue-500 focus:ring-blue-500"
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor={`${dayKey}-end`} className="text-sm font-medium text-blue-900 block mb-2">
+                                  End Time
+                                </Label>
+                                <Input
+                                  id={`${dayKey}-end`}
+                                  type="time"
+                                  value={dayAvail.preferredEnd || ''}
+                                  onChange={(e) => setEditAvailability(prev => ({
+                                    ...prev,
+                                    [dayKey]: { ...prev[dayKey], preferredEnd: e.target.value || '' }
+                                  }))}
+                                  className="h-10 border-blue-300 focus:border-blue-500 focus:ring-blue-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </TabsContent>
                   );
                 })}

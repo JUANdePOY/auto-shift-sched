@@ -1,10 +1,11 @@
 const jwt = require('jsonwebtoken');
+const db = require('../../../shared/config/database');
 
 // JWT Secret - In production, use environment variable
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Middleware to verify JWT token
-const authenticateToken = (req, res, next) => {
+// Middleware to verify JWT token and check user status
+const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ message: 'No token provided' });
@@ -14,6 +15,21 @@ const authenticateToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Check if user is still active in database
+    const [users] = await db.execute(
+      'SELECT status FROM employees WHERE id = ?',
+      [decoded.userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+
+    if (users[0].status === 'inactive') {
+      return res.status(403).json({ message: 'Account is inactive. Access denied.' });
+    }
+
     req.user = decoded;
     next();
   } catch (error) {

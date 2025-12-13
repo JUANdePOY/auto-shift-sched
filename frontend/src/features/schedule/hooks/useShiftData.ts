@@ -30,15 +30,12 @@ export const useShiftData = (isOpen: boolean, date: string, departments: Departm
     }
   }, [isOpen]);
 
-  // Reset assignments when date changes
-  useEffect(() => {
-    setAssignments([]);
-  }, [date]);
+
 
   // Initialize shift assignments when departments are loaded or date changes
   useEffect(() => {
     const loadShifts = async () => {
-      if (isOpen && assignments.length === 0 && departmentsData.length > 0 && stations.length > 0) {
+      if (isOpen && departmentsData.length > 0 && stations.length > 0) {
         try {
           const fetchedShifts = await getAllShifts();
           const initialAssignments: ShiftAssignment[] = fetchedShifts.map((shift, index) => {
@@ -80,7 +77,23 @@ export const useShiftData = (isOpen: boolean, date: string, departments: Departm
     };
 
     loadShifts();
-  }, [isOpen, assignments.length, departmentsData, stations, date, getAssignmentsForDate, employees]);
+  }, [isOpen, departmentsData.length, stations.length, date]);
+
+  // Update assignments when temporary assignments change
+  useEffect(() => {
+    if (assignments.length > 0) {
+      const tempAssignments = getAssignmentsForDate(date);
+      const updatedAssignments = assignments.map(assignment => {
+        const temp = tempAssignments.find((t: TemporaryAssignment) => t.shiftId === assignment.id);
+        if (temp) {
+          const employee = employees.find(e => e.id === temp.employeeId);
+          return { ...assignment, assignedEmployee: employee, status: 'assigned' as const };
+        }
+        return { ...assignment, assignedEmployee: undefined, status: 'unassigned' as const };
+      });
+      setAssignments(updatedAssignments);
+    }
+  }, [getAssignmentsForDate(date).length, employees.length]);
 
   return {
     assignments,

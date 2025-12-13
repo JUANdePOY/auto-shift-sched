@@ -41,6 +41,7 @@ interface ScheduleSummary {
   totalAssignments: number;
   totalDays: number;
   completedDays: number;
+  assignments?: TemporaryScheduleState;
 }
 
 interface TemporaryScheduleContextType {
@@ -148,7 +149,7 @@ export function TemporaryScheduleProvider({ children }: TemporaryScheduleProvide
 
     // Calculate total days and completed days
     const totalDays = 7; // Standard work week
-    const completedDays = Object.keys(assignments).length;
+    const completedDays = Object.keys(assignments).filter(date => assignments[date].length > 0).length;
 
     // Group assignments by employee
     const employeeMap = new Map<string, { name: string; assignments: TemporaryAssignment[] }>();

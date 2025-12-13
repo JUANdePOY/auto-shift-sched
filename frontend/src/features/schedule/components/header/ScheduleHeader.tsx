@@ -23,50 +23,55 @@ export function ScheduleHeader({
   isReadOnly = false
 }: ScheduleHeaderProps) {
   return (
-    <div className={`flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-4 rounded-lg border ${isWeeklyScheduleMode ? 'bg-gradient-to-r from-red-50 to-red-100 border-red-200' : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100'}`}>
-      <div className="space-y-1">
-        <h1 className="flex items-center gap-3 text-2xl font-bold text-gray-900">
-          <div className={`p-2 rounded-lg ${isWeeklyScheduleMode ? 'bg-red-600' : 'bg-blue-600'}`}>
-            <Calendar className="w-6 h-6 text-white" />
+    <div className={`bg-gradient-to-br ${isWeeklyScheduleMode ? 'from-red-50 via-red-50 to-red-100' : 'from-slate-50 via-blue-50 to-indigo-50'} rounded-2xl p-4 sm:p-8 border border-slate-200 shadow-sm`}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className={`p-2 sm:p-3 ${isWeeklyScheduleMode ? 'bg-gradient-to-br from-red-500 to-red-600' : 'bg-gradient-to-br from-blue-500 to-indigo-600'} rounded-xl shadow-lg`}>
+            <Calendar className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
           </div>
-          {isWeeklyScheduleMode ? 'Create Weekly Schedule' : 'Schedule View'}
-        </h1>
-        <p className="text-gray-600 text-sm">
-          {isWeeklyScheduleMode ? 'Assign shifts for the week' : 'View shifts and assignments for your team'}
-        </p>
-      </div>
+          <div>
+            <h1 className="text-xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+              {isWeeklyScheduleMode ? 'Create Weekly Schedule' : 'Schedule Management'}
+            </h1>
+            <p className="text-slate-600 mt-1 text-sm sm:text-lg">
+              {isWeeklyScheduleMode ? 'Assign shifts for the week' : 'View and manage shifts for your team'}
+            </p>
+          </div>
+        </div>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        {isWeeklyScheduleMode && onBackToSchedule && (
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+          {isWeeklyScheduleMode && onBackToSchedule && (
+            <Button
+              onClick={onBackToSchedule}
+              variant="outline"
+              className="bg-white hover:bg-gray-50 px-4 sm:px-6 py-2 sm:py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium text-sm sm:text-base"
+            >
+              Back to Schedule
+            </Button>
+          )}
+          {!isReadOnly && (
+            <Button
+              onClick={onCreateWeeklySchedule || (() => onCreateSchedule(formatDateToString(currentWeek)))}
+              className={`${isWeeklyScheduleMode ? 'bg-gradient-to-r from-red-600 to-red-600 hover:from-red-700 hover:to-red-700' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'} text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium text-sm sm:text-base`}
+            >
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+              <span className="hidden sm:inline">{onCreateWeeklySchedule ? 'Create Weekly Schedule' : 'Create Schedule'}</span>
+              <span className="sm:hidden">Create</span>
+            </Button>
+          )}
+
           <Button
-            onClick={onBackToSchedule}
+            onClick={() => {
+              const weekStart = formatDateToString(currentWeek);
+              onRefreshData(weekStart);
+            }}
             variant="outline"
-            className="h-10 px-4 bg-white border-gray-200 shadow-sm hover:bg-gray-50"
+            className="bg-white hover:bg-gray-50 px-4 sm:px-6 py-2 sm:py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium text-sm sm:text-base"
           >
-            Back to Schedule
+            <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+            Refresh
           </Button>
-        )}
-        {!isReadOnly && (
-          <Button
-            onClick={onCreateWeeklySchedule || (() => onCreateSchedule(formatDateToString(currentWeek)))}
-            className={`h-10 px-4 text-white shadow-sm ${isWeeklyScheduleMode ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {onCreateWeeklySchedule ? 'Create Weekly Schedule' : 'Create Schedule'}
-          </Button>
-        )}
-
-        <Button
-          onClick={() => {
-            const weekStart = formatDateToString(currentWeek);
-            onRefreshData(weekStart);
-          }}
-          variant="outline"
-          className="h-10 px-4 bg-white border-gray-200 shadow-sm hover:bg-gray-50"
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        </div>
       </div>
     </div>
   );

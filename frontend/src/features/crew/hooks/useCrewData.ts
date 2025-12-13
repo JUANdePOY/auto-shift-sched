@@ -75,8 +75,11 @@ export function useCrewData(employeeId: string) {
   const updateAvailability = async (availabilityId: string, updates: Partial<CrewAvailability>) => {
     try {
       // Check if availability is locked before updating
-      if (updates.weekStart) {
-        const status = await crewService.getAvailabilityStatus(employeeId, updates.weekStart);
+      const weekStart = updates.weekStart || availability?.weekStart;
+      if (weekStart) {
+        // Ensure weekStart is a date string without time
+        const dateOnly = weekStart.includes('T') ? weekStart.split('T')[0] : weekStart;
+        const status = await crewService.getAvailabilityStatus(employeeId, dateOnly);
         if (status.isLocked) {
           throw new Error('Availability submissions are locked for this week');
         }

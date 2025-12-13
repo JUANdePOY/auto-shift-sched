@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/components/ui/card';
 import { Button } from '../../shared/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../shared/components/ui/select';
-import { User } from 'lucide-react';
+import { User, Clock } from 'lucide-react';
 import type { Employee } from '../../shared/types';
-import { parseTime } from '../utils/suggestionUtils';
+import { parseTime, calculateEmployeeScore } from '../utils/suggestionUtils';
 
 interface QuickAssignSectionProps {
   availableEmployees: Employee[];
@@ -14,6 +14,7 @@ interface QuickAssignSectionProps {
   shiftEndTime?: string;
   employeeCurrentHours: Record<string, number>;
   onQuickAssign: (employeeId: string) => void;
+  assignedEmployeeIds?: string[];
 }
 
 export function QuickAssignSection({
@@ -23,55 +24,62 @@ export function QuickAssignSection({
   shiftTime,
   shiftEndTime,
   employeeCurrentHours,
-  onQuickAssign
+  onQuickAssign,
+  assignedEmployeeIds = []
 }: QuickAssignSectionProps) {
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
 
-  // Filter employees based on station and department requirements
-  const filteredEmployees = availableEmployees.filter(employee => {
-    if (!employee.station) return false;
+  // Calculate shift duration for hours calculation
+  const shiftDuration = useMemo(() => {
+    if (!shiftTime || !shiftEndTime) return 0;
+    const startMinutes = parseTime(shiftTime);
+    const endMinutes = parseTime(shiftEndTime);
+    return (endMinutes - startMinutes) / 60;
+  }, [shiftTime, shiftEndTime]);
 
-    // Convert employee stations to array and clean up
-    let employeeStations: string[] = [];
-
-    if (Array.isArray(employee.station)) {
-      // Handle nested array structure
-      employeeStations = employee.station.flat().map(s => {
-        if (typeof s === 'string') {
-          return s.trim().toLowerCase();
-        }
-        if (typeof s === 'object' && s !== null && 'name' in s) {
-          const name = (s as { name: unknown }).name;
-          return typeof name === 'string' ? name.trim().toLowerCase() : '';
-        }
-        return String(s).trim().toLowerCase();
-      });
-    } else if (typeof employee.station === 'string') {
-      // Handle single string with possible commas
-      employeeStations = employee.station.split(',').map(s => s.trim().toLowerCase());
-    } else {
-      // Handle any other case by converting to string
-      employeeStations = String(employee.station).split(',').map(s => s.trim().toLowerCase());
+  // Filter and rank employees by station matching and current hours
+  const rankedEmployees = useMemo(() => {
+    if (!availableEmployees || !requiredStations || requiredStations.length === 0) {
+      return [];
     }
 
-    // Remove any empty strings from the array
-    employeeStations = employeeStations.filter(s => s !== '');
+    const filtered = availableEmployees.filter(employee => {
+      // Skip employees already assigned on this date
+      if (assignedEmployeeIds.includes(employee.id)) return false;
+      
+      if (!employee.station) return false;
 
-    // Clean up required stations
-    const trimmedRequiredStations = requiredStations
-      .filter(s => s != null && s !== '')
-      .map(s => s.trim().toLowerCase());
+      const employeeStations = Array.isArray(employee.station)
+        ? employee.station.flat().map(s => String(s).toLowerCase().trim())
+        : String(employee.station).split(',').map(s => s.toLowerCase().trim());
 
-    // Check for matches - employee needs at least one matching station
-    const hasMatchingStation = trimmedRequiredStations.some(required =>
-      employeeStations.some(empStation => 
-        empStation.toLowerCase().includes(required.toLowerCase()) || 
-        required.toLowerCase().includes(empStation.toLowerCase())
-      )
-    );
+      const shiftStations = requiredStations.map(s => s.toLowerCase().trim());
 
-    return hasMatchingStation;
-  });
+      // Employee must have at least one exact matching station
+      return shiftStations.some(shiftStation =>
+        employeeStations.some(empStation =>
+          empStation === shiftStation || 
+          empStation.includes(shiftStation) || 
+          shiftStation.includes(empStation)
+        )
+      );
+    });
+
+    // Rank employees by AI score (considers hours, skills, availability)
+    return filtered.map(employee => {
+      const currentHours = employeeCurrentHours[employee.id] || 0;
+      const projectedHours = currentHours + shiftDuration;
+      const score = calculateEmployeeScore(
+        employee,
+        undefined, // shiftDate not needed for quick assign
+        shiftTime,
+        shiftEndTime,
+        requiredStations,
+        currentHours
+      );
+      return { employee, currentHours, projectedHours, score };
+    }).sort((a, b) => b.score - a.score);
+  }, [availableEmployees?.length, requiredStations?.join(','), shiftTime, shiftEndTime, shiftDuration, assignedEmployeeIds?.join(',')]);
 
   const handleAssign = () => {
     if (selectedEmployee) {
@@ -91,35 +99,46 @@ export function QuickAssignSection({
       <CardContent className="space-y-2">
         <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
           <SelectTrigger>
-            <SelectValue placeholder="Select employee" />
+            <SelectValue placeholder={`Select employee (${rankedEmployees.length} available)`} />
           </SelectTrigger>
           <SelectContent>
-            {filteredEmployees.map(employee => {
-              // Get actual current scheduled hours for the week
-              const currentHours = employeeCurrentHours[employee.id] || 0;
-
-              // Calculate shift duration in hours
-              const shiftStartMinutes = shiftTime ? parseTime(shiftTime) : 0;
-              const shiftEndMinutes = shiftEndTime ? parseTime(shiftEndTime) : 0;
-              const shiftHours = (shiftEndMinutes - shiftStartMinutes) / 60;
-
-              const afterHours = currentHours + shiftHours;
-
-              return (
-                <SelectItem key={employee.id} value={employee.id}>
-                  {employee.name} - {employee.role} (Current: {currentHours.toFixed(1)} hrs)
-                </SelectItem>
-              );
-            })}
+            {rankedEmployees.length > 0 ? (
+              rankedEmployees.map(({ employee, currentHours, projectedHours }) => {
+                const hoursWarning = projectedHours > 40;
+                
+                return (
+                  <SelectItem key={employee.id} value={employee.id}>
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-medium">{employee.name}</span>
+                      <div className="flex items-center gap-1 text-xs">
+                        <Clock className="w-3 h-3" />
+                        <span className={hoursWarning ? 'text-orange-600 font-medium' : 'text-muted-foreground'}>
+                          {currentHours.toFixed(1)}h → {projectedHours.toFixed(1)}h
+                        </span>
+                      </div>
+                    </div>
+                  </SelectItem>
+                );
+              })
+            ) : (
+              <SelectItem value="no-employees" disabled>
+                No employees with matching stations
+              </SelectItem>
+            )}
           </SelectContent>
         </Select>
+        
+
         <Button
           onClick={handleAssign}
           disabled={!selectedEmployee}
           size="sm"
           className="w-full"
         >
-          Assign Selected
+          {selectedEmployee && rankedEmployees.find(r => r.employee.id === selectedEmployee)?.projectedHours > 40
+            ? 'Assign (Over 40h)'
+            : 'Assign Selected'
+          }
         </Button>
       </CardContent>
     </Card>

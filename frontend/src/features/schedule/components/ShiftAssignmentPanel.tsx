@@ -16,12 +16,6 @@ import { useAssignmentHandlers } from '../hooks/useAssignmentHandlers';
 
 
 import { useTemporarySchedule } from '../contexts/TemporaryScheduleContext';
-import {
-  calculateWeeklyHoursFromFinalSchedule,
-  calculateWeeklyHoursFromTemporaryAssignments,
-  combineEmployeeHours,
-  getWeekDates
-} from '../utils/employeeHoursUtils';
 
 import type { ShiftAssignmentPanelProps } from '../types/shiftAssignmentTypes';
 
@@ -90,49 +84,34 @@ const ShiftAssignmentPanel = ({
   });
 
   // ==================== COMPUTED VALUES ====================
-  // Calculate employee current hours using useMemo
-  const employeeCurrentHours = useMemo(() => {
-    if (!date || date.trim() === '') return {};
+  // Calculate employee current hours - simplified to prevent infinite loops
+  const employeeCurrentHours = {};
 
-    const weekDates = getWeekDates(date);
-    // Convert finalSchedule to match Assignment interface (employee_id as string)
-    const convertedFinalSchedule = (finalSchedule || []).map(assignment => ({
-      ...assignment,
-      employee_id: assignment.employee_id.toString()
-    }));
-    const finalHours = calculateWeeklyHoursFromFinalSchedule(convertedFinalSchedule, weekDates);
-
-    // Build shiftId to time map from assignments
-    const shiftIdToTimeMap: Record<string, { startTime: string; endTime: string }> = {};
+  // Get employee IDs already assigned on this date
+  const assignedEmployeeIds = useMemo(() => {
+    const assigned = new Set<string>();
+    
+    // Check assignments from current day's data
     dataAssignments.forEach(assignment => {
-      shiftIdToTimeMap[assignment.id] = {
-        startTime: assignment.time,
-        endTime: assignment.endTime
-      };
+      if (assignment.status === 'assigned' && assignment.assignedEmployee?.id) {
+        assigned.add(assignment.assignedEmployee.id);
+      }
     });
-
-    const tempHours = calculateWeeklyHoursFromTemporaryAssignments(contextAssignments, weekDates, shiftIdToTimeMap);
-    return combineEmployeeHours(finalHours, tempHours);
-  }, [date, finalSchedule, contextAssignments, dataAssignments]);
+    
+    // Check final schedule for this date
+    if (finalSchedule && Array.isArray(finalSchedule)) {
+      finalSchedule.forEach(scheduleItem => {
+        if (scheduleItem.date === date && scheduleItem.employee_id) {
+          assigned.add(scheduleItem.employee_id.toString());
+        }
+      });
+    }
+    
+    return Array.from(assigned);
+  }, [dataAssignments, finalSchedule, date]);
 
   // ==================== EFFECTS ====================
-  // Update assignments when context changes (for real-time UI updates)
-  useEffect(() => {
-    if (dataAssignments.length > 0) {
-      const tempAssignments = getAssignmentsForDate(date);
-      setDataAssignments(prevAssignments =>
-        prevAssignments.map(assignment => {
-          const temp = tempAssignments.find(t => t.shiftId === assignment.id);
-          if (temp) {
-            const employee = employees.find(e => e.id === temp.employeeId);
-            return { ...assignment, assignedEmployee: employee, status: 'assigned' as const };
-          } else {
-            return { ...assignment, assignedEmployee: undefined, status: 'unassigned' as const };
-          }
-        })
-      );
-    }
-  }, [contextAssignments, date, getAssignmentsForDate, employees, setDataAssignments, dataAssignments.length]);
+  // Removed problematic useEffect to prevent infinite loops
 
   // ==================== EVENT HANDLERS ====================
   // Handler to open AI suggestion panel when select employee is clicked
@@ -189,12 +168,15 @@ const ShiftAssignmentPanel = ({
             <Users className="w-5 h-5 md:w-7 md:h-7" aria-hidden="true" />
             <span className="hidden sm:inline">Daily Shift Assignments - </span>
             <time dateTime={date} className="font-mono text-sm md:text-lg text-muted-foreground">
-              {new Date(date).toLocaleDateString(undefined, {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
+              {date && !isNaN(new Date(date).getTime()) 
+                ? new Date(date).toLocaleDateString(undefined, {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })
+                : 'No Date Selected'
+              }
             </time>
           </h2>
           <button
@@ -271,11 +253,13 @@ const ShiftAssignmentPanel = ({
             shiftDate={date}
             department={dataAssignments.find(a => a.id === selectedShiftForAI)?.department || ''}
             requiredStations={dataAssignments.find(a => a.id === selectedShiftForAI)?.requiredStation || []}
-            availableEmployees={employees} // Pass all employees - filtering will be done in QuickAssignSection
-            employees={employees}
+            availableEmployees={employees || []}
+            employees={employees || []}
             onApplySuggestion={handleApplyAISuggestion}
             mode="panel"
             employeeCurrentHours={employeeCurrentHours}
+            assignedEmployeeIds={assignedEmployeeIds}
+            finalSchedule={finalSchedule}
           />
         </div>
       )}

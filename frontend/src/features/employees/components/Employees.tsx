@@ -18,12 +18,14 @@ import { EmployeeList } from './EmployeeList';
 import type { Employee, Department, Station } from '../../shared/types';
 
 export function Employees() {
-  const { employees, addEmployee, editEmployee, removeEmployee, loading, error, fetchEmployees } = useEmployees();
+  const { employees, addEmployee, editEmployee, removeEmployee, loading, error, fetchEmployees } = useEmployees(true); // Include admins in employee management
   const [departments, setDepartments] = useState<Department[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [filterStation, setFilterStation] = useState<string>('all');
+  const [filterRole, setFilterRole] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('name');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -95,7 +97,10 @@ export function Employees() {
                             (Array.isArray(emp.station) 
                               ? emp.station.includes(filterStation)
                               : emp.station === filterStation);
-      return matchesSearch && matchesDepartment && matchesStation;
+      const matchesRole = filterRole === 'all' || emp.role === filterRole;
+      const matchesStatus = filterStatus === 'all' || 
+                           (filterStatus === 'active' ? emp.isActive !== false : emp.isActive === false);
+      return matchesSearch && matchesDepartment && matchesStation && matchesRole && matchesStatus;
     })
     .sort((a, b) => {
       switch (sortBy) {
@@ -110,10 +115,9 @@ export function Employees() {
           return aStation.localeCompare(bStation);
         }
         case 'role': {
-          // Handle both string and array of strings for station (role)
-          const aStation = Array.isArray(a.station) ? a.station.join(', ') : a.station;
-          const bStation = Array.isArray(b.station) ? b.station.join(', ') : b.station;
-          return aStation.localeCompare(bStation);
+          const aRole = a.role || 'crew';
+          const bRole = b.role || 'crew';
+          return aRole.localeCompare(bRole);
         }
         case 'utilization': {
           const aUtil = (a.currentWeeklyHours / a.maxHoursPerWeek);
@@ -182,37 +186,30 @@ export function Employees() {
 
   return (
     <div className="space-y-8">
-      {/* Enhanced Header with Inline Stats */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
-        <div className="flex items-center justify-between gap-8">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Users className="w-6 h-6 text-blue-600" />
+      {/* Enhanced Header */}
+      <div className="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 rounded-2xl p-8 border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+              <Users className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Employee Management</h1>
-              <p className="text-gray-600">Manage your workforce and track performance metrics</p>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                Employee Management
+              </h1>
+              <p className="text-slate-600 mt-1 text-lg">
+                Organize and manage your team efficiently
+              </p>
             </div>
           </div>
-
-          {/* Inline Stats - Right Side */}
-          <div className="flex items-center gap-6 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              <span className="font-medium text-gray-700">{employees.length}</span>
-              <span className="text-gray-500">Total Employee</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="font-medium text-gray-700">{employees.filter(emp => emp.currentWeeklyHours > 0).length}</span>
-              <span className="text-gray-500">Active</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-              <span className="font-medium text-gray-700">{Math.round(employees.length > 0 ? employees.reduce((sum, emp) => sum + emp.currentWeeklyHours, 0) / employees.length : 0)}h</span>
-              <span className="text-gray-500">Avg Hours</span>
-            </div>
-          </div>
+          
+          <Button
+            onClick={handleAddEmployee}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Add Employee
+          </Button>
         </div>
       </div>
 
@@ -224,12 +221,16 @@ export function Employees() {
         searchTerm={searchTerm}
         filterDepartment={filterDepartment}
         filterStation={filterStation}
+        filterRole={filterRole}
+        filterStatus={filterStatus}
         sortBy={sortBy}
         departments={departments}
         stations={stations}
         onSearchChange={setSearchTerm}
         onDepartmentChange={setFilterDepartment}
         onStationChange={setFilterStation}
+        onRoleChange={setFilterRole}
+        onStatusChange={setFilterStatus}
         onSortChange={setSortBy}
       />
 
@@ -272,7 +273,7 @@ export function Employees() {
         size="icon"
       >
         <Plus className="w-6 h-6" />
-        <span className="sr-only">Add Employe</span>
+        <span className="sr-only">Add Employeeee</span>
       </Button>
     </div>
   );

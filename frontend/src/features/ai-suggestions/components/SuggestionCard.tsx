@@ -4,15 +4,13 @@ import { Button } from '../../shared/components/ui/button';
 import { Badge } from '../../shared/components/ui/badge';
 import {
   CheckCircle,
-  ThumbsUp,
-  ThumbsDown,
   Users,
   ArrowRight,
   TrendingUp,
-  Brain
+  Brain,
+  Star
 } from 'lucide-react';
 import type { AISuggestion, Employee } from '../../shared/types';
-import { getConfidenceColor } from '../utils/suggestionUtils';
 
 interface SuggestionCardProps {
   suggestion: AISuggestion;
@@ -20,13 +18,15 @@ interface SuggestionCardProps {
   isApplied: boolean;
   onApply: () => void;
   getEmployeeName: (id: string) => string;
+  employeeCurrentHours?: Record<string, number>;
 }
 
 export function SuggestionCard({
   suggestion,
   isApplied,
   onApply,
-  getEmployeeName
+  getEmployeeName,
+  employeeCurrentHours = {}
 }: SuggestionCardProps) {
   const getSuggestionIconComponent = (type: string) => {
     switch (type) {
@@ -43,24 +43,29 @@ export function SuggestionCard({
 
   const SuggestionIcon = getSuggestionIconComponent(suggestion.type);
 
+  const getRecommendationLevel = (confidence: number) => {
+    if (confidence >= 85) return { label: 'Highly Recommended', color: 'bg-green-100 text-green-800' };
+    if (confidence >= 70) return { label: 'Recommended', color: 'bg-blue-100 text-blue-800' };
+    return { label: 'Consider', color: 'bg-gray-100 text-gray-800' };
+  };
+
+  const recommendation = getRecommendationLevel(suggestion.confidence);
+
   return (
-    <Card className={isApplied ? 'border-green-200 bg-green-50/50' : ''}>
+    <Card className={isApplied ? 'border-green-200 bg-green-50/50' : 'hover:shadow-md transition-shadow'}>
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
-              <SuggestionIcon className="w-4 h-4" />
+              <SuggestionIcon className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <CardTitle className="text-base">{suggestion.title}</CardTitle>
-              <CardDescription>{suggestion.description}</CardDescription>
             </div>
           </div>
-          <Badge
-            variant="outline"
-            className={`${getConfidenceColor(suggestion.confidence)} border-current`}
-          >
-            {suggestion.confidence}% confidence
+          <Badge className={recommendation.color}>
+            <Star className="w-3 h-3 mr-1" />
+            {recommendation.label}
           </Badge>
         </div>
       </CardHeader>
@@ -80,10 +85,17 @@ export function SuggestionCard({
                 </>
               )}
             </p>
+            
+            {/* Show current hours if available */}
+            {employeeCurrentHours[suggestion.action.employeeId] !== undefined && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Current hours: {employeeCurrentHours[suggestion.action.employeeId].toFixed(1)}h this week
+              </p>
+            )}
             {/* Display reasons if available */}
             {suggestion.reasons && suggestion.reasons.length > 0 && (
               <div className="mt-2">
-                <p className="text-xs text-muted-foreground font-medium">Reasons:</p>
+                <p className="text-xs text-muted-foreground font-medium">Smart Analysis:</p>
                 <ul className="text-xs text-muted-foreground mt-1 space-y-1">
                   {suggestion.reasons.map((reason, index) => (
                     <li key={index} className="flex items-start gap-1">
@@ -96,26 +108,15 @@ export function SuggestionCard({
             )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm">
-                <ThumbsUp className="w-4 h-4 mr-1" />
-                Helpful
-              </Button>
-              <Button variant="ghost" size="sm">
-                <ThumbsDown className="w-4 h-4 mr-1" />
-                Not helpful
-              </Button>
-            </div>
-
+          {/* Action Button */}
+          <div className="flex justify-end">
             {isApplied ? (
               <Badge variant="secondary" className="flex items-center gap-1">
                 <CheckCircle className="w-3 h-3" />
                 Applied
               </Badge>
             ) : (
-              <Button onClick={onApply} size="sm">
+              <Button onClick={onApply} size="sm" className="bg-blue-600 hover:bg-blue-700">
                 Apply Suggestion
               </Button>
             )}

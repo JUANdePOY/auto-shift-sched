@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { cn } from './lib/utils';
+import { Clock } from 'lucide-react';
 import { Navigation } from './features/shared/components/Navigation';
 import { Dashboard } from './features/shared/components/Dashboard';
 
@@ -26,8 +27,8 @@ export default function App() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const [currentView, setCurrentView] = useState<View>('dashboard');
 
-  // Custom hooks for state management
-  const { employees } = useEmployees();
+  // Custom hooks for state management - exclude admins from scheduling
+  const { employees } = useEmployees(false);
   const { schedule, finalSchedule, fetchSchedule, fetchFinalScheduleForWeek } = useSchedule();
 
   // Fetch initial schedule data on app mount (only if authenticated)
@@ -83,7 +84,24 @@ export default function App() {
         case 'availability':
           return (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold">Availability Management</h2>
+              {/* Enhanced Availability Header */}
+              <div className="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 rounded-2xl p-8 border border-slate-200 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+                      <Clock className="w-7 h-7 text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                        Availability Management
+                      </h1>
+                      <p className="text-slate-600 mt-1 text-lg">
+                        Track and manage employee availability schedules
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <AvailabilityPanel
                 initialWeekStart={getCurrentWeekStart()}
               />

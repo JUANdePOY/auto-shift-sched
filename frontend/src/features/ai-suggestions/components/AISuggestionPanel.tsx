@@ -12,6 +12,7 @@ import { SuggestionCard } from './SuggestionCard';
 import { QuickAssignSection } from './QuickAssignSection';
 import { SuggestionStats } from './SuggestionStats';
 import { useAISuggestions } from '../hooks/useAISuggestions';
+import { formatTo12Hour } from '../../../utils/timeUtils';
 
 interface AISuggestionsPanelProps {
   suggestions?: AISuggestion[];
@@ -30,6 +31,8 @@ interface AISuggestionsPanelProps {
   availableEmployees?: Employee[];
   mode?: 'full' | 'panel';
   employeeCurrentHours?: Record<string, number>; // Current scheduled hours for the week by employee ID
+  assignedEmployeeIds?: string[]; // Employee IDs already assigned on this date
+  finalSchedule?: any[]; // Final schedule data for last week calculations
 }
 
 export function AISuggestionsPanel({
@@ -47,7 +50,9 @@ export function AISuggestionsPanel({
   requiredStations = [],
   availableEmployees = [],
   mode = 'full',
-  employeeCurrentHours = {}
+  employeeCurrentHours = {},
+  assignedEmployeeIds = [],
+  finalSchedule = []
 }: AISuggestionsPanelProps) {
   const {
     shiftSuggestions,
@@ -62,7 +67,9 @@ export function AISuggestionsPanel({
     shiftDate,
     shiftTime,
     shiftEndTime,
-    employeeCurrentHours
+    employeeCurrentHours,
+    finalSchedule,
+    assignedEmployeeIds
   });
 
   const handleApply = (suggestion: AISuggestion) => {
@@ -102,14 +109,14 @@ export function AISuggestionsPanel({
     return (
       <div className="h-full flex flex-col bg-background">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-center justify-between p-6 border-b border-border bg-gradient-to-r from-blue-50 to-indigo-50">
           <div>
-            <h3 className="font-semibold flex items-center gap-2">
+            <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900">
               <Brain className="w-5 h-5 text-blue-600" />
-              AI Suggestions
+              Smart Assistant
             </h3>
-            <p className="text-lg text-muted-foreground">
-              {shiftTitle} - {requiredStations.map(s => s.replace(/\b\w/g, l => l.toUpperCase())).join(', ')} from {shiftTime} to {shiftEndTime}
+            <p className="text-sm text-muted-foreground mt-1">
+              <span className="font-medium">{shiftTitle}</span> • {requiredStations.map(s => s.replace(/\b\w/g, l => l.toUpperCase())).join(', ')} • {shiftTime ? formatTo12Hour(shiftTime) : ''} - {shiftEndTime ? formatTo12Hour(shiftEndTime) : ''}
             </p>
           </div>
           {onClose && (
@@ -120,23 +127,25 @@ export function AISuggestionsPanel({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
           {/* Quick Assign Section */}
-          {department && (
-            <QuickAssignSection
-              availableEmployees={availableEmployees}
-              requiredStations={requiredStations}
-              department={department}
-              shiftTime={shiftTime}
-              shiftEndTime={shiftEndTime}
-              employeeCurrentHours={employeeCurrentHours}
-              onQuickAssign={handleQuickAssignWrapper}
-            />
-          )}
+          <QuickAssignSection
+            availableEmployees={availableEmployees}
+            requiredStations={requiredStations}
+            department={department || ''}
+            shiftTime={shiftTime}
+            shiftEndTime={shiftEndTime}
+            employeeCurrentHours={employeeCurrentHours}
+            onQuickAssign={handleQuickAssignWrapper}
+            assignedEmployeeIds={assignedEmployeeIds}
+          />
 
           {/* AI Suggestions */}
-          <div className="space-y-3">
-            <h4 className="font-medium text-sm">Smart Recommendations</h4>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-blue-600" />
+              <h4 className="font-semibold text-base">Smart Recommendations</h4>
+            </div>
             {shiftSuggestions.map((suggestion) => (
               <SuggestionCard
                 key={suggestion.id}
@@ -145,17 +154,18 @@ export function AISuggestionsPanel({
                 isApplied={appliedSuggestions.has(suggestion.id)}
                 onApply={() => handleApply(suggestion)}
                 getEmployeeName={getEmployeeName}
+                employeeCurrentHours={employeeCurrentHours}
               />
             ))}
           </div>
 
           {shiftSuggestions.length === 0 && (
-            <Card>
+            <Card className="border-dashed">
               <CardContent className="pt-6 text-center">
                 <Brain className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="font-medium">No AI Suggestions</h3>
-                <p className="text-sm text-muted-foreground">
-                  No recommendations available for this shift.
+                <h3 className="font-medium text-muted-foreground">No Suggestions Available</h3>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Use Quick Assign above to manually select an employee.
                 </p>
               </CardContent>
             </Card>
@@ -165,102 +175,5 @@ export function AISuggestionsPanel({
     );
   }
 
-  // Full mode - original implementation
-  const categorizedSuggestions = {
-    assignment: suggestions.filter(s => s.type === 'assignment'),
-    optimization: suggestions.filter(s => s.type === 'optimization'),
-    swap: suggestions.filter(s => s.type === 'swap')
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="flex items-center gap-2">
-          <Brain className="w-6 h-6 text-blue-600" />
-          AI Scheduling Suggestions
-        </h1>
-        <p className="text-muted-foreground">
-          Smart recommendations to optimize your schedule
-        </p>
-      </div>
-
-      {/* Summary Stats */}
-      <SuggestionStats suggestions={suggestions} />
-
-      {/* Suggestions by Category */}
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="all">All ({suggestions.length})</TabsTrigger>
-          <TabsTrigger value="assignment">Assignments ({categorizedSuggestions.assignment.length})</TabsTrigger>
-          <TabsTrigger value="optimization">Optimization ({categorizedSuggestions.optimization.length})</TabsTrigger>
-          <TabsTrigger value="swap">Swaps ({categorizedSuggestions.swap.length})</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="space-y-4">
-          {suggestions.map((suggestion) => (
-            <SuggestionCard
-              key={suggestion.id}
-              suggestion={suggestion}
-              employees={employees}
-              isApplied={appliedSuggestions.has(suggestion.id)}
-              onApply={() => handleApply(suggestion)}
-              getEmployeeName={getEmployeeName}
-            />
-          ))}
-        </TabsContent>
-
-        <TabsContent value="assignment" className="space-y-4">
-          {categorizedSuggestions.assignment.map((suggestion) => (
-            <SuggestionCard
-              key={suggestion.id}
-              suggestion={suggestion}
-              employees={employees}
-              isApplied={appliedSuggestions.has(suggestion.id)}
-              onApply={() => handleApply(suggestion)}
-              getEmployeeName={getEmployeeName}
-            />
-          ))}
-        </TabsContent>
-
-        <TabsContent value="optimization" className="space-y-4">
-          {categorizedSuggestions.optimization.map((suggestion) => (
-            <SuggestionCard
-              key={suggestion.id}
-              suggestion={suggestion}
-              employees={employees}
-              isApplied={appliedSuggestions.has(suggestion.id)}
-              onApply={() => handleApply(suggestion)}
-              getEmployeeName={getEmployeeName}
-            />
-          ))}
-        </TabsContent>
-
-        <TabsContent value="swap" className="space-y-4">
-          {categorizedSuggestions.swap.length > 0 ? (
-            categorizedSuggestions.swap.map((suggestion) => (
-              <SuggestionCard
-                key={suggestion.id}
-                suggestion={suggestion}
-                employees={employees}
-                isApplied={appliedSuggestions.has(suggestion.id)}
-                onApply={() => handleApply(suggestion)}
-                getEmployeeName={getEmployeeName}
-              />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="pt-6 text-center">
-                <ArrowRight className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <h3>No Swap Suggestions</h3>
-                <p className="text-muted-foreground">
-                  No employee swap recommendations available at this time.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
+  
 }

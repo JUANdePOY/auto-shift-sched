@@ -26,7 +26,16 @@ class AvailabilityMatcher {
       return false;
     }
 
-    // Check if shift times overlap with available times
+    // Check timeBlocks first (more specific availability periods)
+    if (availability.timeBlocks && Array.isArray(availability.timeBlocks) && availability.timeBlocks.length > 0) {
+      // Check if shift overlaps with any time block
+      return availability.timeBlocks.some(block => {
+        if (!block.startTime || !block.endTime) return false;
+        return this.timesOverlap(shift.startTime, shift.endTime, block.startTime, block.endTime);
+      });
+    }
+
+    // Fallback to legacy startTime/endTime
     return this.timesOverlap(
       shift.startTime,
       shift.endTime,

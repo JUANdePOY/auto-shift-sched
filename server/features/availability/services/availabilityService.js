@@ -212,7 +212,8 @@ class AvailabilityService {
       );
 
       const [employeeCount] = await db.query(
-        'SELECT COUNT(*) as total_employees FROM employees'
+        'SELECT COUNT(*) as total_employees FROM employees WHERE role != ?',
+        ['admin']
       );
 
       return {
@@ -234,63 +235,79 @@ class AvailabilityService {
   async getWeeklySubmissions(weekStart) {
     try {
       const [results] = await db.query(
-        `SELECT 
-          asub.id,
-          asub.employee_id as employeeId,
+        `SELECT
+          e.id as employeeId,
           e.name as employeeName,
           e.department,
           e.station,
-          asub.week_start as weekStart,
-          asub.availability,
-          asub.submission_date as submissionDate,
-          asub.is_locked as isLocked
-         FROM availability_submissions asub
-         JOIN employees e ON asub.employee_id = e.id
-         WHERE asub.week_start = ?
-         ORDER BY e.name, asub.submission_date DESC`,
-        [weekStart]
+          a.id,
+          a.week_start as weekStart,
+          a.availability,
+          a.submission_date as submissionDate,
+          a.is_locked as isLocked
+        FROM employees e
+        LEFT JOIN (
+          SELECT employee_id, week_start, id, availability, submission_date, is_locked
+          FROM availability_submissions a1
+          WHERE week_start = ? AND id = (
+            SELECT id FROM availability_submissions a2 
+            WHERE a2.employee_id = a1.employee_id AND a2.week_start = a1.week_start 
+            ORDER BY submission_date DESC LIMIT 1
+          )
+        ) a ON e.id = a.employee_id
+        WHERE e.role != ?
+        ORDER BY e.name`,
+        [weekStart, 'admin']
       );
 
       return results.map(submission => {
+        const hasSubmission = submission.id !== null;
         let availability;
-        try {
-          // MySQL JSON column returns parsed objects, not strings
-          if (submission.availability === null || submission.availability === undefined) {
-            console.warn(`Null or undefined availability for employee ${submission.employeeId}, week ${submission.weekStart}`);
-            availability = { ...this.defaultAvailability };
-          } else if (typeof submission.availability === 'object') {
-            // Already parsed by MySQL JSON column
-            availability = submission.availability;
-          } else if (typeof submission.availability === 'string') {
-            // Handle legacy string data or corrupted data
-            if (submission.availability === '[object Object]' ||
-                submission.availability === 'undefined' ||
-                submission.availability === 'null' ||
-                submission.availability.trim() === '') {
-              console.warn(`Invalid or corrupted string data in availability for employee ${submission.employeeId}, week ${submission.weekStart}: ${submission.availability}`);
+        
+        if (hasSubmission) {
+          try {
+            // MySQL JSON column returns parsed objects, not strings
+            if (submission.availability === null || submission.availability === undefined) {
+              console.warn(`Null or undefined availability for employee ${submission.employeeId}, week ${submission.weekStart}`);
               availability = { ...this.defaultAvailability };
+            } else if (typeof submission.availability === 'object') {
+              // Already parsed by MySQL JSON column
+              availability = submission.availability;
+            } else if (typeof submission.availability === 'string') {
+              // Handle legacy string data or corrupted data
+              if (submission.availability === '[object Object]' ||
+                  submission.availability === 'undefined' ||
+                  submission.availability === 'null' ||
+                  submission.availability.trim() === '') {
+                console.warn(`Invalid or corrupted string data in availability for employee ${submission.employeeId}, week ${submission.weekStart}: ${submission.availability}`);
+                availability = { ...this.defaultAvailability };
+              } else {
+                availability = JSON.parse(submission.availability);
+              }
             } else {
-              availability = JSON.parse(submission.availability);
+              console.warn(`Unexpected availability type for employee ${submission.employeeId}, week ${submission.weekStart}: ${typeof submission.availability}`);
+              availability = { ...this.defaultAvailability };
             }
-          } else {
-            console.warn(`Unexpected availability type for employee ${submission.employeeId}, week ${submission.weekStart}: ${typeof submission.availability}`);
+          } catch (parseError) {
+            console.warn(`Invalid JSON in availability for employee ${submission.employeeId}, week ${submission.weekStart}: ${submission.availability}`);
             availability = { ...this.defaultAvailability };
           }
-        } catch (parseError) {
-          console.warn(`Invalid JSON in availability for employee ${submission.employeeId}, week ${submission.weekStart}: ${submission.availability}`);
+        } else {
+          // No submission, use default availability
           availability = { ...this.defaultAvailability };
         }
+        
         return {
           id: submission.id,
           employeeId: submission.employeeId,
           employeeName: submission.employeeName,
           department: submission.department,
           station: submission.station,
-          weekStart: submission.weekStart,
+          weekStart: submission.weekStart || weekStart,
           availability,
           submissionDate: submission.submissionDate,
-          isLocked: submission.isLocked,
-          status: submission.isLocked ? 'locked' : 'submitted'
+          isLocked: submission.isLocked || false,
+          status: hasSubmission ? (submission.isLocked ? 'locked' : 'submitted') : 'not_submitted'
         };
       });
     } catch (error) {
@@ -351,16 +368,13 @@ class AvailabilityService {
    */
   async adminSubmitAvailability(employeeId, weekStart, availability) {
     try {
-      // For admin, bypass lock and date checks
-      // Delete existing submissions for this employee and week to "update"
-      await db.query(
-        'DELETE FROM availability_submissions WHERE employee_id = ? AND week_start = ?',
-        [employeeId, weekStart]
-      );
-
       const query = `
         INSERT INTO availability_submissions (employee_id, week_start, availability, submission_date, is_locked)
         VALUES (?, ?, ?, NOW(), FALSE)
+        ON DUPLICATE KEY UPDATE
+        availability = VALUES(availability),
+        submission_date = NOW(),
+        is_locked = FALSE
       `;
 
       await db.query(query, [
@@ -417,14 +431,57 @@ class AvailabilityService {
         };
       }
 
-      // Check if shift falls within preferred times if specified
-      if (dayAvailability.preferredStart && dayAvailability.preferredEnd) {
-        const shiftStart = new Date(`1970-01-01T${startTime}`);
-        const shiftEnd = new Date(`1970-01-01T${endTime}`);
-        const preferredStart = new Date(`1970-01-01T${dayAvailability.preferredStart}`);
-        const preferredEnd = new Date(`1970-01-01T${dayAvailability.preferredEnd}`);
+      // Convert shift times to minutes since midnight for easier comparison
+      const shiftStartMinutes = this.timeToMinutes(startTime);
+      const shiftEndMinutes = this.timeToMinutes(endTime);
 
-        if (shiftStart < preferredStart || shiftEnd > preferredEnd) {
+      // Check timeBlocks first (more specific availability periods)
+      if (dayAvailability.timeBlocks && Array.isArray(dayAvailability.timeBlocks) && dayAvailability.timeBlocks.length > 0) {
+        // Check if shift overlaps with any time block
+        const hasOverlappingBlock = dayAvailability.timeBlocks.some(block => {
+          if (!block.startTime || !block.endTime) return false;
+
+          const blockStartMinutes = this.timeToMinutes(block.startTime);
+          const blockEndMinutes = this.timeToMinutes(block.endTime);
+
+          // Check for overlap: shift starts before block ends AND shift ends after block starts
+          return shiftStartMinutes < blockEndMinutes && shiftEndMinutes > blockStartMinutes;
+        });
+
+        if (!hasOverlappingBlock) {
+          return {
+            available: false,
+            reason: 'Shift does not overlap with any available time blocks'
+          };
+        }
+
+        // Check if shift is completely within any preferred time block
+        const hasPreferredBlock = dayAvailability.timeBlocks.some(block => {
+          if (!block.startTime || !block.endTime || !block.preferred) return false;
+
+          const blockStartMinutes = this.timeToMinutes(block.startTime);
+          const blockEndMinutes = this.timeToMinutes(block.endTime);
+
+          // Check if shift is completely within this preferred block
+          return shiftStartMinutes >= blockStartMinutes && shiftEndMinutes <= blockEndMinutes;
+        });
+
+        return {
+          available: true,
+          preferred: hasPreferredBlock,
+          reason: hasPreferredBlock ? 'Within preferred time block' : 'Within available time block but not preferred'
+        };
+      }
+
+      // Fallback to preferredStart/preferredEnd if no timeBlocks
+      if (dayAvailability.preferredStart && dayAvailability.preferredEnd) {
+        const preferredStartMinutes = this.timeToMinutes(dayAvailability.preferredStart);
+        const preferredEndMinutes = this.timeToMinutes(dayAvailability.preferredEnd);
+
+        // Check if shift overlaps with preferred times
+        const overlapsPreferred = shiftStartMinutes < preferredEndMinutes && shiftEndMinutes > preferredStartMinutes;
+
+        if (!overlapsPreferred) {
           return {
             available: true,
             preferred: false,
@@ -432,22 +489,63 @@ class AvailabilityService {
           };
         }
 
+        // Check if shift is completely within preferred times
+        const withinPreferred = shiftStartMinutes >= preferredStartMinutes && shiftEndMinutes <= preferredEndMinutes;
+
         return {
           available: true,
-          preferred: true
-        };
-      } else {
-        // If no preferred times set, not preferred
-        return {
-          available: true,
-          preferred: false,
-          reason: 'No preferred times set'
+          preferred: withinPreferred,
+          reason: withinPreferred ? 'Within preferred hours' : 'Overlaps with preferred hours'
         };
       }
+
+      // Fallback to legacy startTime/endTime if no preferred times
+      if (dayAvailability.startTime && dayAvailability.endTime) {
+        const availStartMinutes = this.timeToMinutes(dayAvailability.startTime);
+        const availEndMinutes = this.timeToMinutes(dayAvailability.endTime);
+
+        // Check if shift overlaps with available times (with 1-hour flexibility)
+        const flexibilityMinutes = 60; // 1 hour flexibility
+        const canStart = shiftStartMinutes >= (availStartMinutes - flexibilityMinutes);
+        const canEnd = shiftEndMinutes <= (availEndMinutes + flexibilityMinutes);
+
+        if (!canStart || !canEnd) {
+          return {
+            available: false,
+            reason: 'Outside available hours'
+          };
+        }
+
+        // Determine if shift is within available times
+        const withinAvailable = shiftStartMinutes >= availStartMinutes && shiftEndMinutes <= availEndMinutes;
+
+        return {
+          available: true,
+          preferred: withinAvailable,
+          reason: withinAvailable ? 'Within available hours' : 'Within flexible available hours'
+        };
+      }
+
+      // If no specific times set, consider available but not preferred
+      return {
+        available: true,
+        preferred: false,
+        reason: 'No specific times set'
+      };
     } catch (error) {
       console.error('Error checking employee availability:', error);
       throw error;
     }
+  }
+
+  /**
+   * Convert time string to minutes since midnight
+   * @param {string} time - Time string (HH:MM)
+   * @returns {number} Minutes since midnight
+   */
+  timeToMinutes(time) {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
   }
 }
 

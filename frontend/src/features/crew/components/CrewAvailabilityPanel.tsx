@@ -17,13 +17,21 @@ interface CrewAvailabilityPanelProps {
 export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps) {
   const { availability, availabilityStatus, fetchAvailability, submitAvailability, updateAvailability } = useCrewData(employeeId);
   const [selectedWeek, setSelectedWeek] = useState<string>(() => {
-    // Get next Monday
+    // Get next Monday using local date
     const today = new Date();
-    const dayOfWeek = today.getDay();
-    const diff = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
-    const nextMonday = new Date(today);
-    nextMonday.setDate(today.getDate() + diff);
-    return nextMonday.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+    const todayDate = new Date(todayStr + 'T00:00:00');
+    const dayOfWeek = todayDate.getDay();
+    const diff = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 7 : 8 - dayOfWeek);
+    const nextMonday = new Date(todayDate);
+    nextMonday.setDate(todayDate.getDate() + diff);
+    const mondayYear = nextMonday.getFullYear();
+    const mondayMonth = String(nextMonday.getMonth() + 1).padStart(2, '0');
+    const mondayDay = String(nextMonday.getDate()).padStart(2, '0');
+    return `${mondayYear}-${mondayMonth}-${mondayDay}`;
   });
 
   const [localAvailability, setLocalAvailability] = useState<CrewAvailability | null>(null);
@@ -76,7 +84,12 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
 
     try {
       if (availability) {
-        await updateAvailability(availability.id, localAvailability);
+        // For updates, ensure weekStart is included
+        const updates = {
+          ...localAvailability,
+          weekStart: selectedWeek // Always include the current selected week
+        };
+        await updateAvailability(availability.id, updates);
       } else {
         await submitAvailability(localAvailability);
       }
@@ -217,7 +230,7 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900">Available Weeks</h3>
             <div className="grid gap-3">
-              {getNextWeeks().map((week, index) => {
+              {getNextWeeks().map((week) => {
                 const isSelected = selectedWeek === week.start;
                 return (
                   <button

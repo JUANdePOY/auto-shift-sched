@@ -212,6 +212,8 @@ export async function getEmployeeSuggestions(shiftId: string, date: string): Pro
   score: number;
   reasons: string[];
 }>> {
+  console.log('[FRONTEND DEBUG] Making API call to /api/schedule/suggest-employee with:', { shiftId, date });
+
   const response = await fetch(`${API_URL}/schedule/suggest-employee`, {
     method: 'POST',
     headers: {
@@ -220,10 +222,17 @@ export async function getEmployeeSuggestions(shiftId: string, date: string): Pro
     body: JSON.stringify({ shiftId, date }),
   });
 
+  console.log('[FRONTEND DEBUG] API response status:', response.status);
+
   if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[FRONTEND DEBUG] API call failed:', errorText);
     throw new Error('Failed to get employee suggestions');
   }
-  return response.json();
+
+  const data = await response.json();
+  console.log('[FRONTEND DEBUG] API response data:', data);
+  return data;
 }
 
 /**

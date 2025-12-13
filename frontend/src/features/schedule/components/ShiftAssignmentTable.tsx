@@ -7,6 +7,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { Tooltip, TooltipTrigger, TooltipContent } from '../../shared/components/ui/tooltip';
 import { Clock, Users, Check, X, UserMinus, Edit, Trash2 } from 'lucide-react';
 import type { ShiftAssignment } from '../types/shiftAssignmentTypes';
+import { formatTo12Hour } from '../../../utils/timeUtils';
 
 interface ShiftAssignmentTableProps {
   assignments: ShiftAssignment[];
@@ -64,7 +65,7 @@ const ShiftAssignmentTable: React.FC<ShiftAssignmentTableProps> = ({
                 <TableCell className="font-medium flex items-center gap-2 py-4">
                   <Clock className="w-4 h-4 text-blue-600" />
                   <span className="text-sm font-mono">
-                    In: {assignment.time} Out: {assignment.endTime}
+                    In: {formatTo12Hour(assignment.time)} Out: {formatTo12Hour(assignment.endTime)}
                   </span>
                 </TableCell>
                 <TableCell className="py-4">

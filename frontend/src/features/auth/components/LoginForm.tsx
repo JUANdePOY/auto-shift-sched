@@ -111,14 +111,6 @@ export function LoginForm() {
                 )}
               </Button>
             </form>
-
-            <div className="mt-6 text-center text-sm text-gray-600">
-              <p>Demo Credentials:</p>
-              <div className="mt-2 space-y-1">
-                <p><strong>Admin:</strong> admin / admin123</p>
-                <p><strong>Crew:</strong> crew / crew123</p>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>

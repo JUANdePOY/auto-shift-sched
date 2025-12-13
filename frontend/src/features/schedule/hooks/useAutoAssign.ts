@@ -31,7 +31,7 @@ export function useAutoAssign({
   onAssignmentsUpdate
 }: UseAutoAssignProps) {
   const [isAutoAssigning, setIsAutoAssigning] = useState(false);
-  const { assignments: tempAssignments, updateAssignment } = useTemporarySchedule();
+  const { assignments: contextAssignments, updateAssignment } = useTemporarySchedule();
 
   // Calculate current weekly hours for each employee
   const calculateCurrentWeeklyHours = () => {
@@ -52,7 +52,7 @@ export function useAutoAssign({
     });
 
     // Add hours from temporary assignments
-    Object.entries(tempAssignments).forEach(([assignmentDate, dateAssignments]) => {
+    Object.entries(contextAssignments).forEach(([assignmentDate, dateAssignments]) => {
       if (weekDates.includes(assignmentDate)) {
         dateAssignments.forEach(tempAssignment => {
           // Find the shift to get hours
@@ -68,53 +68,7 @@ export function useAutoAssign({
     return hoursMap;
   };
 
-  // Fair distribution fallback when no AI suggestions are available
-  const assignFairly = (unassignedShifts: ShiftAssignment[], updatedAssignments: ShiftAssignment[]) => {
-    const weeklyHours = calculateCurrentWeeklyHours();
-    let assignedCount = 0;
 
-    // Sort employees by current weekly hours (ascending - least hours first)
-    const sortedEmployees = [...employees].sort((a, b) => {
-      return (weeklyHours[a.id] || 0) - (weeklyHours[b.id] || 0);
-    });
-
-    // Assign shifts to employees with least hours first
-    for (const shift of unassignedShifts) {
-      // Find the employee with the least hours who isn't already assigned on this date
-      const availableEmployee = sortedEmployees.find(employee => {
-        // Check if employee is already assigned on this date
-        const isAlreadyAssigned = updatedAssignments.some(assignment =>
-          assignment.assignedEmployee?.id === employee.id &&
-          assignment.status === 'assigned'
-        );
-        return !isAlreadyAssigned;
-      });
-
-      if (availableEmployee) {
-        // Update the assignment
-        const assignmentIndex = updatedAssignments.findIndex(a => a.id === shift.id);
-        if (assignmentIndex !== -1) {
-          updatedAssignments[assignmentIndex] = {
-            ...updatedAssignments[assignmentIndex],
-            assignedEmployee: availableEmployee,
-            status: 'assigned' as const
-          };
-          assignedCount++;
-
-          // Update weekly hours for this employee
-          const hours = calculateShiftHours(shift.time, shift.endTime);
-          weeklyHours[availableEmployee.id] = (weeklyHours[availableEmployee.id] || 0) + hours;
-
-          // Re-sort employees after assignment
-          sortedEmployees.sort((a, b) => {
-            return (weeklyHours[a.id] || 0) - (weeklyHours[b.id] || 0);
-          });
-        }
-      }
-    }
-
-    return assignedCount;
-  };
 
   const handleAutoAssign = async () => {
     const unassignedShifts = assignments.filter(a => a.status === 'unassigned');
@@ -129,67 +83,116 @@ export function useAutoAssign({
     try {
       const updatedAssignments = [...assignments];
       let assignedCount = 0;
+      const weekDates = getWeekDates(date);
+      const currentWeeklyHours = calculateCurrentWeeklyHours();
 
-      // First, try to assign using AI suggestions
-      const shiftsWithoutAISuggestions: ShiftAssignment[] = [];
+      // Get already assigned employee IDs for this date
+      const assignedEmployeeIds = new Set();
+      updatedAssignments.forEach(assignment => {
+        if (assignment.status === 'assigned' && assignment.assignedEmployee?.id) {
+          assignedEmployeeIds.add(assignment.assignedEmployee.id);
+        }
+      });
+      
+      // Add employees from temporary assignments
+      const dateAssignments = contextAssignments[date] || [];
+      dateAssignments.forEach(tempAssignment => {
+        assignedEmployeeIds.add(tempAssignment.employeeId);
+      });
 
-      for (const shift of unassignedShifts) {
+      // Track employee assignments across the week for diversity
+      const employeeWeeklyAssignments = new Map<string, {
+        times: Set<string>;
+        stations: Set<string>;
+        days: Set<string>;
+        totalHours: number;
+      }>();
+
+      // Initialize tracking for all employees
+      employees.forEach(emp => {
+        employeeWeeklyAssignments.set(emp.id, {
+          times: new Set(),
+          stations: new Set(),
+          days: new Set(),
+          totalHours: currentWeeklyHours[emp.id] || 0
+        });
+      });
+
+      // Populate existing assignments from context
+      weekDates.forEach(weekDate => {
+        const weekAssignments = contextAssignments[weekDate] || [];
+        weekAssignments.forEach(assignment => {
+          const tracking = employeeWeeklyAssignments.get(assignment.employeeId);
+          if (tracking && assignment.shiftData) {
+            tracking.days.add(weekDate);
+            tracking.times.add(assignment.shiftData.startTime);
+            assignment.shiftData.requiredStation.forEach(station => {
+              tracking.stations.add(station);
+            });
+          }
+        });
+      });
+
+      // Sort shifts by priority (harder to fill shifts first)
+      const sortedShifts = [...unassignedShifts].sort((a, b) => {
+        // Prioritize shifts with fewer matching employees
+        const aMatches = employees.filter(emp => canEmployeeWorkShift(emp, a, assignedEmployeeIds)).length;
+        const bMatches = employees.filter(emp => canEmployeeWorkShift(emp, b, assignedEmployeeIds)).length;
+        return aMatches - bMatches;
+      });
+
+      // Try AI suggestions first, fallback to enhanced assignment
+      for (const shift of sortedShifts) {
+        let assignedEmployee = null;
+
         try {
-          // Get AI suggestions for this shift
+          // Try AI suggestions first
           const suggestions = await getEmployeeSuggestions(shift.id, date);
+          
+          if (suggestions.length > 0) {
+            // Find the best available employee from AI suggestions
+            const availableEmployee = suggestions.find(suggestion => {
+              const employee = employees.find(emp => emp.id === suggestion.employee.id);
+              return employee && canEmployeeWorkShift(employee, shift, assignedEmployeeIds);
+            });
 
-          if (suggestions.length === 0) {
-            shiftsWithoutAISuggestions.push(shift);
-            continue;
+            if (availableEmployee) {
+              assignedEmployee = employees.find(emp => emp.id === availableEmployee.employee.id);
+            }
           }
+        } catch (error) {
+          console.warn(`AI suggestions failed for shift ${shift.id}, using enhanced assignment:`, error.message);
+        }
 
-          // Find the best available employee (not already assigned on this date)
-          const availableEmployee = suggestions.find(suggestion => {
-            const employee = employees.find(emp => emp.id === suggestion.employee.id);
-            if (!employee) return false;
-            
-            // Check if employee is already assigned on this date
-            const isAlreadyAssigned = updatedAssignments.some(assignment =>
-              assignment.assignedEmployee?.id === employee.id &&
-              assignment.status === 'assigned'
-            );
-            return !isAlreadyAssigned;
-          });
+        // Enhanced assignment logic if AI suggestions failed
+        if (!assignedEmployee) {
+          assignedEmployee = findBestEmployeeForShift(shift, employees, assignedEmployeeIds, employeeWeeklyAssignments);
+        }
 
-          if (!availableEmployee) {
-            shiftsWithoutAISuggestions.push(shift);
-            continue;
-          }
-
-          // Find the employee in our employees list
-          const employee = employees.find(emp => emp.id === availableEmployee.employee.id);
-          if (!employee) {
-            console.warn(`Employee ${availableEmployee.employee.id} not found in employees list`);
-            shiftsWithoutAISuggestions.push(shift);
-            continue;
-          }
-
+        if (assignedEmployee) {
           // Update the assignment
           const assignmentIndex = updatedAssignments.findIndex(a => a.id === shift.id);
           if (assignmentIndex !== -1) {
             updatedAssignments[assignmentIndex] = {
               ...updatedAssignments[assignmentIndex],
-              assignedEmployee: employee,
+              assignedEmployee: assignedEmployee,
               status: 'assigned' as const
             };
+            assignedEmployeeIds.add(assignedEmployee.id);
             assignedCount++;
+
+            // Update tracking for diversity
+            const tracking = employeeWeeklyAssignments.get(assignedEmployee.id);
+            if (tracking) {
+              tracking.days.add(date);
+              tracking.times.add(shift.time);
+              shift.requiredStation.forEach(station => {
+                tracking.stations.add(station);
+              });
+              tracking.totalHours += calculateShiftHours(shift.time, shift.endTime);
+            }
           }
-
-        } catch (error) {
-          console.error(`Failed to get suggestions for shift ${shift.id}:`, error);
-          shiftsWithoutAISuggestions.push(shift);
         }
-      }
-
-      // If there are shifts without AI suggestions, assign them fairly
-      if (shiftsWithoutAISuggestions.length > 0) {
-        const fairAssignedCount = assignFairly(shiftsWithoutAISuggestions, updatedAssignments);
-        assignedCount += fairAssignedCount;
       }
 
       // Update the assignments in local state
@@ -209,8 +212,12 @@ export function useAutoAssign({
         }
       });
 
-      const coverageRate = Math.round((assignedCount / unassignedShifts.length) * 100);
-      toast.success(`Auto-assignment completed! ${assignedCount}/${unassignedShifts.length} shifts assigned (${coverageRate}% coverage)`);
+      if (assignedCount > 0) {
+        const coverageRate = Math.round((assignedCount / unassignedShifts.length) * 100);
+        toast.success(`Auto-assignment completed! ${assignedCount}/${unassignedShifts.length} shifts assigned (${coverageRate}% coverage)`);
+      } else {
+        toast.info('No shifts could be auto-assigned. Please check employee availability and station requirements.');
+      }
 
     } catch (error) {
       console.error('Auto-assignment failed:', error);
@@ -220,8 +227,94 @@ export function useAutoAssign({
     }
   };
 
+  // Helper function to check if employee can work a shift
+  const canEmployeeWorkShift = (employee: Employee, shift: ShiftAssignment, assignedIds: Set<string>): boolean => {
+    if (assignedIds.has(employee.id)) return false;
+    
+    // Check station compatibility
+    if (shift.requiredStation && shift.requiredStation.length > 0) {
+      const employeeStations = Array.isArray(employee.station) 
+        ? employee.station.flat().map(s => String(s).toLowerCase().trim())
+        : String(employee.station || '').split(',').map(s => s.toLowerCase().trim());
+      
+      const hasMatchingStation = shift.requiredStation.some(required =>
+        employeeStations.some(empStation =>
+          empStation.includes(required.toLowerCase()) || required.toLowerCase().includes(empStation)
+        )
+      );
+      
+      if (!hasMatchingStation) return false;
+    }
+    
+    return true;
+  };
+
+  // Enhanced employee selection for diversity
+  const findBestEmployeeForShift = (
+    shift: ShiftAssignment, 
+    availableEmployees: Employee[], 
+    assignedIds: Set<string>,
+    weeklyTracking: Map<string, { times: Set<string>; stations: Set<string>; days: Set<string>; totalHours: number }>
+  ): Employee | null => {
+    const eligibleEmployees = availableEmployees.filter(emp => 
+      canEmployeeWorkShift(emp, shift, assignedIds)
+    );
+
+    if (eligibleEmployees.length === 0) return null;
+
+    // Score employees based on diversity and workload balance
+    const scoredEmployees = eligibleEmployees.map(employee => {
+      const tracking = weeklyTracking.get(employee.id);
+      if (!tracking) return { employee, score: 0 };
+
+      let score = 100; // Base score
+
+      // Prefer employees with fewer total hours (workload balance)
+      if (tracking.totalHours >= 24) {
+        score -= 50; // Heavily penalize if already at 24+ hours
+      } else if (tracking.totalHours >= 16) {
+        score -= 20;
+      } else if (tracking.totalHours < 8) {
+        score += 30; // Bonus for underworked employees
+      }
+
+      // Diversity bonuses for employees with 24+ hour availability
+      if (tracking.totalHours < 24) {
+        // Time diversity bonus
+        if (!tracking.times.has(shift.time)) {
+          score += 15;
+        }
+
+        // Station diversity bonus
+        const hasWorkedAnyStation = shift.requiredStation.some(station => 
+          tracking.stations.has(station)
+        );
+        if (!hasWorkedAnyStation) {
+          score += 10;
+        }
+
+        // Day spread bonus (prefer employees working fewer days)
+        if (tracking.days.size < 4) {
+          score += 5;
+        }
+      }
+
+      // Slight preference for employees who haven't worked this day yet
+      if (!tracking.days.has(date)) {
+        score += 5;
+      }
+
+      return { employee, score };
+    });
+
+    // Sort by score (highest first) and return the best candidate
+    scoredEmployees.sort((a, b) => b.score - a.score);
+    return scoredEmployees[0]?.employee || null;
+  };
+
   return {
     isAutoAssigning,
-    handleAutoAssign
+    handleAutoAssign,
+    calculateCurrentWeeklyHours
   };
 }

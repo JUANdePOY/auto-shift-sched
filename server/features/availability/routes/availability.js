@@ -7,6 +7,7 @@ const {
   validateEmployeeId,
   validateWeekStart 
 } = require('../validation/availabilityValidation');
+const availabilityService = require('../services/availabilityService');
 
 const router = express.Router();
 
@@ -17,32 +18,8 @@ const { validateWeekStartStatus } = require('../validation/statusValidation');
 router.get('/status/:weekStart', validateWeekStartStatus, async (req, res, next) => {
   try {
     const { weekStart } = req.params;
-
-    const [submissionCount] = await db.query(
-      `SELECT COUNT(DISTINCT employee_id) as total_submissions
-       FROM availability_submissions
-       WHERE week_start = ?`,
-      [weekStart]
-    );
-
-    const [lockedCount] = await db.query(
-      `SELECT COUNT(*) as locked_count
-       FROM availability_submissions
-       WHERE week_start = ? AND is_locked = TRUE`,
-      [weekStart]
-    );
-
-    const [employeeCount] = await db.query(
-      'SELECT COUNT(*) as total_employees FROM employees'
-    );
-
-    res.json({
-      weekStart,
-      totalEmployees: employeeCount[0].total_employees,
-      submissions: submissionCount[0].total_submissions,
-      locked: lockedCount[0].locked_count > 0,
-      submissionRate: Math.round((submissionCount[0].total_submissions / employeeCount[0].total_employees) * 100)
-    });
+    const statusData = await availabilityService.getAvailabilityStatus(weekStart);
+    res.json(statusData);
   } catch (error) {
     console.error('Error checking availability status:', error);
     res.status(500).json({
@@ -57,53 +34,7 @@ router.get('/week/:weekStart', validateWeekStartStatus, async (req, res, next) =
   try {
     const { weekStart } = req.params;
     console.log('Received weekStart in /week/:weekStart:', weekStart);
-
-    const [results] = await db.query(
-      `SELECT
-        e.id as employeeId,
-        e.name as employeeName,
-        e.department,
-        e.station,
-        a.id,
-        a.week_start as weekStart,
-        a.availability,
-        a.submission_date as submissionDate,
-        a.is_locked as isLocked
-      FROM employees e
-      LEFT JOIN availability_submissions a ON e.id = a.employee_id AND a.week_start = ?
-      ORDER BY e.name`,
-      [weekStart]
-    );
-
-    const submissions = results.map(submission => {
-      const hasSubmission = submission.id !== null;
-      const availability = hasSubmission ? safeJsonParse(submission.availability, {}) : safeJsonParse(submission.availability || '{}', {});
-      // If no submission, use default availability from employee table
-      if (!hasSubmission) {
-        // Assuming default availability is stored in employees table, but since it's not, use a default
-        availability.monday = { available: false };
-        availability.tuesday = { available: false };
-        availability.wednesday = { available: false };
-        availability.thursday = { available: false };
-        availability.friday = { available: false };
-        availability.saturday = { available: false };
-        availability.sunday = { available: false };
-      }
-
-      return {
-        id: submission.id,
-        employeeId: submission.employeeId,
-        employeeName: submission.employeeName,
-        department: submission.department,
-        station: submission.station,
-        weekStart: submission.weekStart || weekStart,
-        availability,
-        submissionDate: submission.submissionDate,
-        isLocked: submission.isLocked || false,
-        status: hasSubmission ? (submission.isLocked ? 'locked' : 'submitted') : 'not_submitted'
-      };
-    });
-
+    const submissions = await availabilityService.getWeeklySubmissions(weekStart);
     res.json(submissions);
   } catch (error) {
     console.error('Error fetching weekly submissions:', error);
@@ -231,8 +162,7 @@ router.post('/admin/submit', availabilityValidationRules, handleValidationErrors
   try {
     const { employeeId, weekStart, availability } = req.body;
 
-    // For admin, bypass lock and date checks
-    // Delete existing submissions for this employee and week to "update"
+    // Delete existing submissions first to avoid duplicates
     await db.query(
       'DELETE FROM availability_submissions WHERE employee_id = ? AND week_start = ?',
       [employeeId, weekStart]

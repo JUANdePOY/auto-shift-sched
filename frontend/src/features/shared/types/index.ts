@@ -20,7 +20,8 @@ export interface Employee {
   maxHoursPerWeek: number;
   currentWeeklyHours: number;
   skills?: string[];
-  role?: string;
+  role?: 'admin' | 'manager' | 'crew';
+  isActive?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -35,12 +36,20 @@ export interface WeeklyAvailability {
   sunday: DayAvailability;
 }
 
+export interface TimeBlock {
+  startTime: string; // Format: "HH:MM"
+  endTime: string;   // Format: "HH:MM"
+  preferred?: boolean;
+  notes?: string;
+}
+
 export interface DayAvailability {
   available: boolean;
   startTime?: string; // Format: "HH:MM"
   endTime?: string;   // Format: "HH:MM"
   preferredStart?: string; // Format: "HH:MM"
   preferredEnd?: string;   // Format: "HH:MM"
+  timeBlocks?: TimeBlock[];
   notes?: string;
 }
 
@@ -95,11 +104,6 @@ export interface AISuggestion {
   title: string;
   description: string;
   confidence: number;
-  impact: {
-    efficiency: number;
-    satisfaction: number;
-    coverage: number;
-  };
   action: {
     type: 'assign' | 'unassign' | 'swap';
     shiftId: string;
@@ -107,7 +111,7 @@ export interface AISuggestion {
     employeeName?: string;
     targetEmployeeId?: string;
   };
-  reasons?: string[]; // Add reasons array to display availability and other reasons
+  reasons?: string[];
 }
 
 export interface WeeklySchedule {

@@ -11,8 +11,8 @@ const getAuthHeaders = (): HeadersInit => {
 };
 
 /**
- * Fetches all employees from the API.
- * @returns A promise that resolves to an array of employees.
+ * Fetches non-admin employees from the API (for scheduling and availability).
+ * @returns A promise that resolves to an array of non-admin employees.
  */
 export async function getAllEmployees(): Promise<Employee[]> {
   const response = await fetch(API_URL, {
@@ -20,6 +20,20 @@ export async function getAllEmployees(): Promise<Employee[]> {
   });
   if (!response.ok) {
     throw new Error('Failed to fetch employees');
+  }
+  return response.json();
+}
+
+/**
+ * Fetches all employees including admins (for admin management).
+ * @returns A promise that resolves to an array of all employees.
+ */
+export async function getAllEmployeesIncludingAdmins(): Promise<Employee[]> {
+  const response = await fetch(`${API_URL}/all`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to fetch all employees');
   }
   return response.json();
 }

@@ -145,30 +145,49 @@ class CrewService {
 
   async updateAvailability(employeeId, availability) {
     try {
-      // First, delete existing availability for this employee
-      await db.execute('DELETE FROM availability WHERE employee_id = ?', [employeeId]);
-
-      // Insert new availability
-      const insertQuery = `
-        INSERT INTO availability (employee_id, day_of_week, available, start_time, end_time)
-        VALUES (?, ?, ?, ?, ?)
+      // Use availability_submissions table with ON DUPLICATE KEY UPDATE (admin-style)
+      // This allows proper updates instead of replacing all data
+      const query = `
+        INSERT INTO availability_submissions (employee_id, week_start, availability, submission_date, is_locked)
+        VALUES (?, ?, ?, NOW(), FALSE)
+        ON DUPLICATE KEY UPDATE
+        availability = VALUES(availability),
+        submission_date = NOW(),
+        is_locked = FALSE
       `;
 
-      for (const day of availability) {
-        await db.execute(insertQuery, [
-          employeeId,
-          day.dayOfWeek,
-          day.available,
-          day.startTime || null,
-          day.endTime || null
-        ]);
+      // Extract week_start from availability data (assuming it's passed in the format)
+      // If not provided, we'll need to get it from existing data or use current week
+      let weekStart = availability.weekStart;
+      if (!weekStart) {
+        // Get the most recent submission for this employee to determine week_start
+        const [existing] = await db.execute(
+          'SELECT week_start FROM availability_submissions WHERE employee_id = ? ORDER BY submission_date DESC LIMIT 1',
+          [employeeId]
+        );
+        weekStart = existing.length > 0 ? existing[0].week_start : this.getCurrentWeekStart();
       }
+
+      await db.execute(query, [
+        employeeId,
+        weekStart,
+        JSON.stringify(availability.preferences || availability)
+      ]);
 
       return { success: true, message: 'Availability updated successfully' };
     } catch (error) {
       console.error('Error in updateAvailability:', error);
       throw error;
     }
+  }
+
+  // Helper method to get current week start (Monday)
+  getCurrentWeekStart() {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(today.setDate(diff));
+    return monday.toISOString().split('T')[0];
   }
 }
 

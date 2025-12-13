@@ -19,7 +19,7 @@ router.post('/login', async (req, res) => {
 
     // Query database for user
     const [users] = await db.execute(
-      'SELECT id, name, email, password, role, department, position FROM employees WHERE name = ?',
+      'SELECT id, name, email, password, role, department, position, status FROM employees WHERE name = ?',
       [name]
     );
 
@@ -28,6 +28,11 @@ router.post('/login', async (req, res) => {
     }
 
     const user = users[0];
+
+    // Check if user account is active
+    if (user.status === 'inactive') {
+      return res.status(403).json({ message: 'Account is inactive. Access denied.' });
+    }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
@@ -81,7 +86,7 @@ router.get('/me', async (req, res) => {
 
     // Query database for user
     const [users] = await db.execute(
-      'SELECT id, name, email, role, department, position FROM employees WHERE id = ?',
+      'SELECT id, name, email, role, department, position, status FROM employees WHERE id = ?',
       [decoded.userId]
     );
 
@@ -90,6 +95,12 @@ router.get('/me', async (req, res) => {
     }
 
     const user = users[0];
+
+    // Check if user account is still active
+    if (user.status === 'inactive') {
+      return res.status(403).json({ message: 'Account is inactive. Access denied.' });
+    }
+
     res.json(user);
 
   } catch (error) {

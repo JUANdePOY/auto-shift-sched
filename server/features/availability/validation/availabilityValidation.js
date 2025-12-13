@@ -19,15 +19,22 @@ const availabilityValidationRules = [
   body('weekStart')
     .isDate({ format: 'YYYY-MM-DD' })
     .withMessage('Week start must be a valid date in YYYY-MM-DD format')
-    .custom((value) => {
+    .customSanitizer((value) => {
       const date = new Date(value);
-      
-      // Ensure it's a Monday (start of week)
+
+      // Adjust to Monday if not already a Monday
       if (date.getDay() !== 1) {
-        throw new Error('Week start must be a Monday');
+        const dayOfWeek = date.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Adjust to Monday
+        const monday = new Date(date);
+        monday.setDate(date.getDate() + diff);
+        const year = monday.getFullYear();
+        const month = String(monday.getMonth() + 1).padStart(2, '0');
+        const day = String(monday.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
       }
-      
-      return true;
+
+      return value;
     }),
 
   // Availability validation

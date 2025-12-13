@@ -123,20 +123,26 @@ router.post('/generate', async (req, res, next) => {
 
 // POST suggest employees for a shift
 router.post('/suggest-employee', async (req, res, next) => {
+  console.log('[BACKEND DEBUG] /suggest-employee endpoint called with:', req.body);
   const { shiftId, date } = req.body;
 
   if (!shiftId) {
+    console.log('[BACKEND DEBUG] Missing shiftId');
     return res.status(400).json({ error: 'shiftId is required' });
   }
 
   if (!date) {
+    console.log('[BACKEND DEBUG] Missing date');
     return res.status(400).json({ error: 'date is required' });
   }
 
   try {
+    console.log('[BACKEND DEBUG] Calling SuggestionEngine.getEmployeeSuggestions');
     const suggestions = await SuggestionEngine.getEmployeeSuggestions(shiftId, date);
+    console.log('[BACKEND DEBUG] Returning suggestions:', suggestions);
     res.json(suggestions);
   } catch (error) {
+    console.log('[BACKEND DEBUG] Error in suggest-employee endpoint:', error.message);
     next(error);
   }
 });
@@ -487,18 +493,19 @@ router.get('/dashboard/employee-utilization/:weekStart', async (req, res, next) 
     endDateObj.setDate(startDateObj.getDate() + 6);
     const endDate = endDateObj.toISOString().split('T')[0];
 
-    // Get all employees
-    const [employees] = await db.query('SELECT id, name, maxHoursPerWeek FROM employees');
+    // Get all non-admin employees
+    const [employees] = await db.query('SELECT id, name, maxHoursPerWeek FROM employees WHERE role != ?', ['admin']);
 
-    // Get scheduled hours for each employee
+    // Get scheduled hours for each non-admin employee
     const [assignments] = await db.query(
       `SELECT e.id, e.name, e.maxHoursPerWeek, 
               SUM(TIME_TO_SEC(TIMEDIFF(s.endTime, s.startTime)) / 3600) as scheduledHours
        FROM employees e
        LEFT JOIN final_schedule fs ON e.id = fs.employee_id AND fs.date_schedule BETWEEN ? AND ?
        LEFT JOIN shifts s ON fs.shift_id = s.id
+       WHERE e.role != ?
        GROUP BY e.id, e.name, e.maxHoursPerWeek`,
-      [weekStart, endDate]
+      [weekStart, endDate, 'admin']
     );
 
     // Calculate utilization percentage for each employee and overall
@@ -551,7 +558,7 @@ router.get('/dashboard/monthly-overview', async (req, res, next) => {
     const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0)
       .toISOString().split('T')[0];
 
-    // Get current month stats
+    // Get current month stats (excluding admin employees)
     const [currentStats] = await db.query(
       `SELECT 
          COUNT(DISTINCT fs.shift_id) as totalShifts,
@@ -560,11 +567,12 @@ router.get('/dashboard/monthly-overview', async (req, res, next) => {
          SUM(TIME_TO_SEC(TIMEDIFF(s.endTime, s.startTime)) / 3600) as totalHours
        FROM final_schedule fs
        LEFT JOIN shifts s ON fs.shift_id = s.id
-       WHERE fs.date_schedule BETWEEN ? AND ?`,
-      [currentMonthStart, currentMonthEnd]
+       LEFT JOIN employees e ON fs.employee_id = e.id
+       WHERE fs.date_schedule BETWEEN ? AND ? AND (e.role != ? OR e.role IS NULL)`,
+      [currentMonthStart, currentMonthEnd, 'admin']
     );
 
-    // Get last month stats for comparison
+    // Get last month stats for comparison (excluding admin employees)
     const [lastStats] = await db.query(
       `SELECT 
          COUNT(DISTINCT fs.shift_id) as totalShifts,
@@ -573,8 +581,9 @@ router.get('/dashboard/monthly-overview', async (req, res, next) => {
          SUM(TIME_TO_SEC(TIMEDIFF(s.endTime, s.startTime)) / 3600) as totalHours
        FROM final_schedule fs
        LEFT JOIN shifts s ON fs.shift_id = s.id
-       WHERE fs.date_schedule BETWEEN ? AND ?`,
-      [lastMonthStart, lastMonthEnd]
+       LEFT JOIN employees e ON fs.employee_id = e.id
+       WHERE fs.date_schedule BETWEEN ? AND ? AND (e.role != ? OR e.role IS NULL)`,
+      [lastMonthStart, lastMonthEnd, 'admin']
     );
 
     // Calculate coverage rate for current month

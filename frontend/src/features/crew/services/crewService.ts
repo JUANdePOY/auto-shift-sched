@@ -104,15 +104,12 @@ class CrewService {
 
   async updateAvailability(employeeId: string, availabilityId: string, updates: Partial<CrewAvailability>): Promise<CrewAvailability> {
     try {
-      // For updates, we need to submit a new availability (since availability_submissions doesn't support updates directly)
-      // The backend handles this by allowing resubmission
-      const submission = {
-        employeeId: parseInt(employeeId),
-        weekStart: updates.weekStart || '',
-        availability: updates.preferences as any || {}
-      };
-
-      const result = await availabilityService.submitAvailability(submission);
+      // Use admin submit which supports updates via ON DUPLICATE KEY UPDATE
+      const result = await availabilityService.adminSubmitAvailability(
+        parseInt(employeeId),
+        updates.weekStart || '',
+        updates.preferences as any || {}
+      );
 
       // Map back to CrewAvailability format
       return {
