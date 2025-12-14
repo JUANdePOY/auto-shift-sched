@@ -1,5 +1,5 @@
 import { Button } from '../../../shared/components/ui/button';
-import { Calendar, RefreshCw, Plus } from 'lucide-react';
+import { Calendar, RefreshCw, Plus, Download } from 'lucide-react';
 
 interface ScheduleHeaderProps {
   onRefreshData: (weekStart?: string) => void;
@@ -10,6 +10,7 @@ interface ScheduleHeaderProps {
   isWeeklyScheduleMode?: boolean;
   onBackToSchedule?: () => void;
   isReadOnly?: boolean;
+  onExport?: () => void;
 }
 
 export function ScheduleHeader({
@@ -20,7 +21,8 @@ export function ScheduleHeader({
   onCreateWeeklySchedule,
   isWeeklyScheduleMode = false,
   onBackToSchedule,
-  isReadOnly = false
+  isReadOnly = false,
+  onExport
 }: ScheduleHeaderProps) {
   return (
     <div className={`bg-gradient-to-br ${isWeeklyScheduleMode ? 'from-red-50 via-red-50 to-red-100' : 'from-slate-50 via-blue-50 to-indigo-50'} rounded-2xl p-4 sm:p-8 border border-slate-200 shadow-sm`}>
@@ -49,7 +51,18 @@ export function ScheduleHeader({
               Back to Schedule
             </Button>
           )}
+          {onExport && !isWeeklyScheduleMode && !isReadOnly && (
+            <Button
+              onClick={onExport}
+              variant="outline"
+              className="bg-white hover:bg-gray-50 px-4 sm:px-6 py-2 sm:py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium text-sm sm:text-base"
+            >
+              <Download className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+              Export Excel
+            </Button>
+          )}
           {!isReadOnly && (
+
             <Button
               onClick={onCreateWeeklySchedule || (() => onCreateSchedule(formatDateToString(currentWeek)))}
               className={`${isWeeklyScheduleMode ? 'bg-gradient-to-r from-red-600 to-red-600 hover:from-red-700 hover:to-red-700' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'} text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-medium text-sm sm:text-base`}
@@ -59,7 +72,6 @@ export function ScheduleHeader({
               <span className="sm:hidden">Create</span>
             </Button>
           )}
-
           <Button
             onClick={() => {
               const weekStart = formatDateToString(currentWeek);

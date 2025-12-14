@@ -2,20 +2,18 @@ const db = require('./shared/config/database');
 
 async function checkFinalSchedule() {
   try {
-    const [rows] = await db.query('SELECT COUNT(*) as count FROM final_schedule');
-    console.log('Total final schedule records:', rows[0].count);
-
-    if (rows[0].count > 0) {
-      const [sample] = await db.query('SELECT * FROM final_schedule LIMIT 5');
-      console.log('Sample final schedule records:');
-      console.log(JSON.stringify(sample, null, 2));
+    // Use DATE_FORMAT to get a stable YYYY-MM-DD string for logging (avoids timezone-shifted Date objects)
+    const [rows] = await db.query("SELECT *, DATE_FORMAT(date_schedule, '%Y-%m-%d') as date_only FROM final_schedule WHERE DATE(date_schedule) BETWEEN ? AND ?", ['2025-11-10', '2025-11-16']);
+    console.log('Final schedule records for Nov 10-16, 2025:', rows.length);
+    if (rows.length > 0) {
+      console.log('Sample record:', rows[0]);
     } else {
-      console.log('No final schedule records found');
+      console.log('No records found for that date range');
     }
   } catch (error) {
-    console.error('Error checking final schedule:', error);
+    console.error('Error:', error);
   } finally {
-    process.exit(0);
+    process.exit();
   }
 }
 

@@ -372,11 +372,11 @@ router.get('/final/week/:startDate', async (req, res, next) => {
 
     // Fetch final schedule for the week - use LEFT JOIN and COALESCE to handle missing shift references
     const query = `
-      SELECT fs.shift_id, fs.employee_id, COALESCE(s.title, fs.shift_title) as shift_title, fs.date_schedule as date, COALESCE(s.startTime, fs.time_in) as startTime, COALESCE(s.endTime, fs.time_out) as endTime, COALESCE(e.name, fs.employee_name) as employee_name, fs.required_stations
+      SELECT fs.shift_id, fs.employee_id, COALESCE(s.title, fs.shift_title) as shift_title, DATE(fs.date_schedule) as date, COALESCE(s.startTime, fs.time_in) as startTime, COALESCE(s.endTime, fs.time_out) as endTime, COALESCE(e.name, fs.employee_name) as employee_name, fs.required_stations
       FROM final_schedule fs
       LEFT JOIN shifts s ON fs.shift_id = s.id
       LEFT JOIN employees e ON fs.employee_id = e.id
-      WHERE fs.date_schedule BETWEEN ? AND ?
+      WHERE DATE(fs.date_schedule) BETWEEN ? AND ?
     `;
     const [results] = await db.query(query, [startDate, endDate]);
 
@@ -413,13 +413,13 @@ router.get('/dashboard/week-summary/:weekStart', async (req, res, next) => {
 
     // Fetch final schedule for the week
     const [assignments] = await db.query(
-      `SELECT fs.shift_id, fs.employee_id, s.title, fs.date_schedule as date, 
+      `SELECT fs.shift_id, fs.employee_id, s.title, DATE(fs.date_schedule) as date,
               s.startTime, s.endTime, e.name as employee_name, s.requiredEmployees
        FROM final_schedule fs
        LEFT JOIN shifts s ON fs.shift_id = s.id
        LEFT JOIN employees e ON fs.employee_id = e.id
-       WHERE fs.date_schedule BETWEEN ? AND ?
-       ORDER BY fs.date_schedule, s.startTime`,
+       WHERE DATE(fs.date_schedule) BETWEEN ? AND ?
+       ORDER BY DATE(fs.date_schedule), s.startTime`,
       [weekStart, endDate]
     );
 
@@ -492,10 +492,10 @@ router.get('/dashboard/employee-utilization/:weekStart', async (req, res, next) 
 
     // Get scheduled hours for each non-admin employee
     const [assignments] = await db.query(
-      `SELECT e.id, e.name, e.maxHoursPerWeek, 
+      `SELECT e.id, e.name, e.maxHoursPerWeek,
               SUM(TIME_TO_SEC(TIMEDIFF(s.endTime, s.startTime)) / 3600) as scheduledHours
        FROM employees e
-       LEFT JOIN final_schedule fs ON e.id = fs.employee_id AND fs.date_schedule BETWEEN ? AND ?
+       LEFT JOIN final_schedule fs ON e.id = fs.employee_id AND DATE(fs.date_schedule) BETWEEN ? AND ?
        LEFT JOIN shifts s ON fs.shift_id = s.id
        WHERE e.role != ?
        GROUP BY e.id, e.name, e.maxHoursPerWeek`,

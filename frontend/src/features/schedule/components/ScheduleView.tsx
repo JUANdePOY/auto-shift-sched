@@ -8,6 +8,7 @@ import { ScheduleHeader } from './header/ScheduleHeader';
 import { WeeklyScheduleSummary } from './WeeklyScheduleSummary';
 import ShiftAssignmentPanel from './ShiftAssignmentPanel';
 import ErrorBoundary from '../../shared/components/ErrorBoundary';
+import { exportScheduleToExcel } from '../utils/exportUtils';
 import {
   getStartOfWeek,
   getWeekDates
@@ -184,6 +185,11 @@ export function ScheduleView({
     onRefreshData();
   };
 
+  const handleExport = () => {
+    if (isReadOnly) return;
+    exportScheduleToExcel(shiftsToDisplay, currentWeek);
+  };
+
   return (
     <div className="space-y-3">
       <ScheduleHeader
@@ -195,6 +201,7 @@ export function ScheduleView({
         isWeeklyScheduleMode={isWeeklyScheduleMode}
         onBackToSchedule={handleBackToSchedule}
         isReadOnly={isReadOnly}
+        onExport={handleExport}
       />
 
       <div className="flex justify-center items-center min-h-[400px]">

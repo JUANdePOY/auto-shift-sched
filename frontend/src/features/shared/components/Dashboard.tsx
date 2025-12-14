@@ -23,18 +23,19 @@ export function Dashboard({ schedule, employees, onViewSchedule }: DashboardProp
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
 
   // Get next week's start date (Monday)
-  const getNextWeekStart = () => {
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const diff = dayOfWeek === 0 ? 1 : 8 - dayOfWeek; // Next Monday
-    const nextMonday = new Date(today);
-    nextMonday.setDate(today.getDate() + diff);
+  const getNextWeekStart = (baseDate?: string) => {
+    const start = baseDate ? new Date(baseDate) : new Date();
+    const dayOfWeek = start.getDay();
+    // Normalize to next Monday relative to the given start date
+    const diff = dayOfWeek === 0 ? 1 : 8 - dayOfWeek; // Next Monday from given date
+    const nextMonday = new Date(start);
+    nextMonday.setDate(start.getDate() + diff);
     return nextMonday.toISOString().split('T')[0];
   };
 
   // Get current week's start date (Monday)
-  const getCurrentWeekStart = () => {
-    const today = new Date();
+  const getCurrentWeekStart = (baseDate?: string) => {
+    const today = baseDate ? new Date(baseDate) : new Date();
     const dayOfWeek = today.getDay();
     const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Current Monday
     const monday = new Date(today);
@@ -42,11 +43,19 @@ export function Dashboard({ schedule, employees, onViewSchedule }: DashboardProp
     return monday.toISOString().split('T')[0];
   };
 
+  const addDaysToDate = (dateStr: string, days: number) => {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0];
+  };
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const currentWeekStart = getCurrentWeekStart();
-        const nextWeekStart = getNextWeekStart();
+        // Prefer the provided schedule's week start when available
+        const currentWeekStart = schedule?.weekStart ?? getCurrentWeekStart();
+        // Compute next week relative to the selected week
+        const nextWeekStart = getNextWeekStart(addDaysToDate(currentWeekStart, 0));
 
         // Fetch all dashboard data in parallel
         const [
@@ -102,13 +111,14 @@ export function Dashboard({ schedule, employees, onViewSchedule }: DashboardProp
     );
   }
 
-  // Get current week start for display
-  const currentWeekStart = getCurrentWeekStart();
-  const weekStartDate = new Date(currentWeekStart);
+  // Use selected schedule week start for display when available
+  const selectedWeekStart = schedule?.weekStart ?? getCurrentWeekStart();
+  const weekStartDate = new Date(selectedWeekStart);
 
   // Use actual data from API calls with fallbacks
-  const coverage = weekSummary?.coverageRate ?? 0;
-  const utilizationPercent = employeeUtilization?.averageUtilization ?? 0;
+  // Ensure percentages are bounded 0-100 and fallbacks are sensible
+  const coverage = Math.min(Math.max(weekSummary?.coverageRate ?? 0, 0), 100);
+  const utilizationPercent = Math.min(Math.max(employeeUtilization?.averageUtilization ?? 0, 0), 100);
   const employeesScheduled = employeeUtilization?.employeesScheduled ?? 0;
   const totalEmps = employeeUtilization?.totalEmployees ?? employees.length;
   const conflictCount = weekSummary?.conflicts?.length ?? 0;
@@ -233,7 +243,15 @@ export function Dashboard({ schedule, employees, onViewSchedule }: DashboardProp
           </CardHeader>
           <CardContent className="space-y-4">
             {weekSummary?.assignments
-              ?.filter(assignment => assignment.date === new Date().toISOString().split('T')[0])
+              // Show assignments for today if today is within the selected week, otherwise show assignments for the first day of the selected week
+              ?.filter(assignment => {
+                const todayIso = new Date().toISOString().split('T')[0];
+                const weekStartIso = selectedWeekStart;
+                const weekEndIso = addDaysToDate(weekStartIso, 6);
+                const isTodayInWeek = todayIso >= weekStartIso && todayIso <= weekEndIso;
+                const targetDate = isTodayInWeek ? todayIso : weekStartIso;
+                return assignment.date === targetDate;
+              })
               ?.slice(0, 4)
               ?.map((assignment) => (
                 <div key={`${assignment.shift_id}-${assignment.employee_id}`} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted/70 transition-colors">
@@ -255,7 +273,15 @@ export function Dashboard({ schedule, employees, onViewSchedule }: DashboardProp
               )) ?? []}
 
             {(!weekSummary?.assignments || weekSummary.assignments.filter(assignment =>
-              assignment.date === new Date().toISOString().split('T')[0]
+              // same logic as above for empty state
+              (() => {
+                const todayIso = new Date().toISOString().split('T')[0];
+                const weekStartIso = selectedWeekStart;
+                const weekEndIso = addDaysToDate(weekStartIso, 6);
+                const isTodayInWeek = todayIso >= weekStartIso && todayIso <= weekEndIso;
+                const targetDate = isTodayInWeek ? todayIso : weekStartIso;
+                return assignment.date === targetDate;
+              })()
             ).length === 0) && (
               <div className="text-center py-4 text-muted-foreground">
                 <CalendarDays className="w-8 h-8 mx-auto mb-2 opacity-50" />

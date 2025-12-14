@@ -298,10 +298,10 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
                         {getDateForDay(day).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                       <Button
                         variant={isAvailable ? 'default' : 'outline'}
-                        size="default"
+                        size="sm"
                         disabled={requestRestDay}
                         onClick={() =>
                           handleAvailabilityChange(
@@ -314,16 +314,16 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
                             dayAvailability?.notes
                           )
                         }
-                        className={`flex items-center gap-2 h-10 px-4 font-medium ${
+                        className={`w-full sm:w-auto flex items-center justify-center gap-1.5 font-medium ${
                           isAvailable ? 'bg-green-600 hover:bg-green-700' : 'border-2 hover:bg-gray-50'
-                        }`}
+                        } sm:h-10 sm:px-4`}
                       >
                         <Clock className="w-4 h-4" />
                         Available
                       </Button>
                       <Button
                         variant="outline"
-                        size="default"
+                        size="sm"
                         disabled={requestRestDay}
                         onClick={() =>
                           handleAvailabilityChange(
@@ -336,7 +336,7 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
                             dayAvailability?.notes
                           )
                         }
-                        className="flex items-center gap-2 h-10 px-4 font-medium border-2 hover:bg-blue-50 hover:border-blue-300"
+                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 font-medium border-2 hover:bg-blue-50 hover:border-blue-300 sm:h-10 sm:px-4"
                       >
                         <Clock className="w-4 h-4" />
                         Anytime
@@ -346,7 +346,7 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
 
                   <Button
                     variant={requestRestDay ? 'destructive' : 'outline'}
-                    size="default"
+                    size="sm"
                     onClick={() => {
                       const newRequestRestDay = !requestRestDay;
                       handleAvailabilityChange(
@@ -359,11 +359,11 @@ export function CrewAvailabilityPanel({ employeeId }: CrewAvailabilityPanelProps
                         dayAvailability?.notes
                       );
                     }}
-                    className={`flex items-center gap-2 h-10 px-4 font-medium self-start lg:self-center ${
+                    className={`w-full sm:w-auto flex items-center justify-center gap-2 font-medium self-start lg:self-center ${
                       requestRestDay 
                         ? 'bg-red-600 hover:bg-red-700' 
                         : 'border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300'
-                    }`}
+                    } sm:h-10 sm:px-4`}
                   >
                     <Coffee className="w-4 h-4" />
                     Rest Request Day

@@ -132,6 +132,10 @@ curl http://localhost:3001/api/shifts
 5. Implement notifications system
 6. Add reporting and analytics
 
+## Documentation
+
+Full project documentation is available in the `docs/` folder. Start with [docs/README.md](docs/README.md) for the architecture and code guide.
+
 ## Contributing
 
 1. Fork the repository

@@ -5,6 +5,7 @@ import { Button } from '../../../shared/components/ui/button';
 import { Calendar, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react';
 import { WeeklyScheduleSummary } from '../WeeklyScheduleSummary';
 import FinalScheduleView from './FinalScheduleView';
+import { formatDateToYYYYMMDD } from '../../utils/exportUtils';
 import type { Shift, ScheduleConflict } from '../../../shared/types';
 
 // Utility function to convert 24-hour time to 12-hour format
@@ -88,21 +89,9 @@ export function WeeklyCardView({
       {/* Weekly cards grid: responsive layout for all 7 days */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         {weekDates.map((date) => {
-          const dateString = date.toISOString().split('T')[0];
-          const dayShifts = shifts.filter(shift => {
-            // Normalize shift date to YYYY-MM-DD format for consistent comparison
-            const shiftDate = shift.date.includes('T')
-              ? shift.date.split('T')[0]
-              : new Date(shift.date).toISOString().split('T')[0];
-            return shiftDate === dateString;
-          });
-          const dayFinalSchedule = finalSchedule?.filter(schedule => {
-            // Normalize schedule date to YYYY-MM-DD format for consistent comparison
-            const scheduleDate = schedule.date.includes('T')
-              ? schedule.date.split('T')[0]
-              : new Date(schedule.date).toISOString().split('T')[0];
-            return scheduleDate === dateString;
-          }) || [];
+          const dateString = formatDateToYYYYMMDD(date);
+          const dayShifts = shifts.filter(shift => formatDateToYYYYMMDD(shift.date) === dateString);
+          const dayFinalSchedule = finalSchedule?.filter(schedule => formatDateToYYYYMMDD(schedule.date) === dateString) || [];
           const dayName = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekDates.indexOf(date)];
 
           return (
@@ -118,7 +107,10 @@ export function WeeklyCardView({
                       {dayName}
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {(() => {
+                        const [y, m, d] = dateString.split('-');
+                        return new Date(Number(y), Number(m) - 1, Number(d)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                      })()}
                     </CardDescription>
                   </div>
                   <div className="flex gap-1">
