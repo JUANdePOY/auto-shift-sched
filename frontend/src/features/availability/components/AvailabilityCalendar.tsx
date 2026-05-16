@@ -111,7 +111,11 @@ const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
 
     setSubmitting(true);
     try {
-      await availabilityService.submitAvailability(employeeId, weekStart, availability);
+      await availabilityService.submitAvailability({
+        employeeId: parseInt(employeeId),
+        weekStart,
+        availability,
+      });
       toast.success('Availability submitted successfully!');
       setLastSubmission(new Date().toISOString());
       onSubmit?.();

@@ -1,4 +1,4 @@
-import type { ScheduleConflict, Employee } from '../../shared/types';
+import type { ScheduleConflict, Employee } from '@/features/shared/types';
 
 export const getStartOfWeek = (date: Date) => {
   const day = date.getDay();

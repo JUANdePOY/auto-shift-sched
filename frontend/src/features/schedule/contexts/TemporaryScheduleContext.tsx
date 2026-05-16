@@ -19,7 +19,7 @@ interface TemporaryScheduleState {
   [date: string]: TemporaryAssignment[];
 }
 
-interface EmployeeWorkload {
+export interface EmployeeWorkload {
   employeeId: string;
   employeeName: string;
   totalHours: number;
@@ -28,11 +28,12 @@ interface EmployeeWorkload {
   departments: string[];
 }
 
-interface ScheduleConflict {
+export interface ScheduleConflict {
   date: string;
   employeeId: string;
   severity: 'warning' | 'error';
   message: string;
+  employeeName?: string;
 }
 
 interface ScheduleSummary {

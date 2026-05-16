@@ -1,6 +1,6 @@
 import { Card, CardContent } from '../../shared/components/ui/card';
 import { Badge } from '../../shared/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '../../shared/components/ui/avatar';
+import { Avatar, AvatarFallback } from '../../shared/components/ui/avatar';
 import { Mail, Edit, Trash2 } from 'lucide-react';
 import type { Employee } from '../../shared/types';
 
@@ -15,7 +15,7 @@ export function EmployeeCard({ employee, onEdit, onDelete }: EmployeeCardProps) 
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
 
-  const stations = (() => {
+  const stations: string[] = (() => {
     if (Array.isArray(employee.station)) {
       // Handle nested array structure [[stations]]
       if (employee.station.length === 1 && Array.isArray(employee.station[0])) {
@@ -67,16 +67,16 @@ export function EmployeeCard({ employee, onEdit, onDelete }: EmployeeCardProps) 
                     </Badge>
                   </div>
                   <p className="text-sm text-gray-600 truncate font-medium">{employee.department}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {stations.length === 0 ? (
-                      <Badge variant="secondary" className="text-xs px-2 py-1 bg-gray-100 text-gray-600">Unassigned</Badge>
-                    ) : (
-                      stations.slice(0, 3).map((station, i) => (
-                        <Badge key={`${station}-${i}`} className="text-xs px-2 py-1 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border border-blue-200 font-medium" title={station}>
-                          {station}
-                        </Badge>
-                      ))
-                    )}
+<div className="mt-2 flex flex-wrap gap-1.5">
+                     {stations.length === 0 ? (
+                       <Badge variant="secondary" className="text-xs px-2 py-1 bg-gray-100 text-gray-600">Unassigned</Badge>
+                     ) : (
+                       stations.slice(0, 3).map((station: string, i: number) => (
+                         <Badge key={`${station}-${i}`} className="text-xs px-2 py-1 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border border-blue-200 font-medium" title={station}>
+                           {station}
+                         </Badge>
+                       ))
+                     )}
                     {stations.length > 3 && (
                       <Badge className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
                         +{stations.length - 3}

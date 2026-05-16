@@ -155,7 +155,7 @@ export const exportScheduleToExcel = (
 // to avoid timezone-induced shifts when an input contains time or zone.
 export const formatDateToYYYYMMDD = (input: string | Date | undefined | null): string => {
   const pad = (n: number) => String(n).padStart(2, '0');
-  if (!input && input !== 0) return '';
+  if (!input) return '';
 
   if (typeof input === 'string') {
     const datePart = input.trim().split('T')[0].split(' ')[0];

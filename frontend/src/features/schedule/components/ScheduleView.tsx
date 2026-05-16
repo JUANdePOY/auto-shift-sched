@@ -245,11 +245,12 @@ export function ScheduleView({
                 View and manage shift information
               </DialogDescription>
             </DialogHeader>
-            <ShiftDetail
-              shift={selectedShift}
-              employees={employees}
-              onClose={() => setSelectedShift(null)}
-            />
+<ShiftDetail
+               shift={selectedShift}
+               employees={employees}
+               conflicts={conflicts}
+               onClose={() => setSelectedShift(null)}
+             />
           </DialogContent>
         </Dialog>
       )}

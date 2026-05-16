@@ -13,7 +13,7 @@ import { RefreshCw, Lock, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock
 import { toast } from 'sonner';
 import type { AdminAvailabilitySubmission, AvailabilityStatus } from '../types/availability';
 import type { Department } from '../../shared/types';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../shared/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../shared/components/ui/dialog';
 
 
 interface AvailabilityPanelProps {
@@ -387,9 +387,9 @@ const AvailabilityPanel: React.FC<AvailabilityPanelProps> = ({ initialWeekStart 
                 <Clock className="w-5 h-5 text-blue-600" />
                 Edit Weekly Availability
               </DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">
+              <DialogDescription>
                 {editingSubmission.employeeName} • {editingSubmission.department}
-              </p>
+              </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">

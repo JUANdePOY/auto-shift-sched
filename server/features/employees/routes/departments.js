@@ -15,11 +15,13 @@ router.get('/', async (req, res, next) => {
       return {
         ...department,
         id: department.id.toString(),
-        stations: stations.map(station => ({
+        stations: Array.isArray(stations) ? stations.map(station => ({
           ...station,
           id: station.id.toString(),
-          departmentId: station.departmentId.toString()
-        }))
+          createdAt: station.createdAt || new Date().toISOString(),
+          updatedAt: station.updatedAt || new Date().toISOString(),
+          departmentId: station.departmentId ? station.departmentId.toString() : null
+        })) : []
       };
     }));
     
@@ -38,7 +40,9 @@ router.get('/:id/stations', async (req, res, next) => {
     const formattedStations = stations.map(station => ({
       ...station,
       id: station.id.toString(),
-      departmentId: station.departmentId.toString()
+      createdAt: station.createdAt || new Date().toISOString(),
+      updatedAt: station.updatedAt || new Date().toISOString(),
+      departmentId: station.departmentId ? station.departmentId.toString() : null
     }));
     
     res.json(formattedStations);
@@ -50,21 +54,38 @@ router.get('/:id/stations', async (req, res, next) => {
 // POST create new department
 router.post('/', async (req, res, next) => {
   try {
-    const { name } = req.body;
+    const { name, description } = req.body;
     
-    const query = 'INSERT INTO departments (name) VALUES (?)';
-    const values = [name];
-    
-    const [result] = await db.query(query, values);
-    
-    // Return the newly created department
-    const [newDepartment] = await db.query('SELECT * FROM departments WHERE id = ?', [result.insertId]);
-    const formattedDepartment = {
-      ...newDepartment[0],
-      id: newDepartment[0].id.toString()
-    };
-    
-    res.status(201).json(formattedDepartment);
+    // Try to insert with description first, fall back to just name if column doesn't exist
+    try {
+      const query = 'INSERT INTO departments (name, description) VALUES (?, ?)';
+      const values = [name, description || null];
+      const [result] = await db.query(query, values);
+      
+      const [newDepartment] = await db.query('SELECT * FROM departments WHERE id = ?', [result.insertId]);
+      const formattedDepartment = {
+        ...newDepartment[0],
+        id: newDepartment[0].id.toString(),
+        createdAt: newDepartment[0].createdAt || new Date().toISOString(),
+        updatedAt: newDepartment[0].updatedAt || new Date().toISOString()
+      };
+      res.status(201).json(formattedDepartment);
+    } catch (err) {
+      // If description column doesn't exist, try without it
+      if (err.code === 'ER_BAD_FIELD_ERROR') {
+        const [result] = await db.query('INSERT INTO departments (name) VALUES (?)', [name]);
+        const [newDepartment] = await db.query('SELECT * FROM departments WHERE id = ?', [result.insertId]);
+        const formattedDepartment = {
+          ...newDepartment[0],
+          id: newDepartment[0].id.toString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        res.status(201).json(formattedDepartment);
+      } else {
+        throw err;
+      }
+    }
   } catch (error) {
     next(error);
   }
@@ -74,25 +95,49 @@ router.post('/', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, description } = req.body;
     
-    const query = 'UPDATE departments SET name = ? WHERE id = ?';
-    const values = [name, id];
-    
-    const [result] = await db.query(query, values);
-    
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Department not found' });
+    try {
+      const query = 'UPDATE departments SET name = ?, description = ? WHERE id = ?';
+      const values = [name, description || null, id];
+      
+      const [result] = await db.query(query, values);
+      
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: 'Department not found' });
+      }
+      
+      const [updatedDepartment] = await db.query('SELECT * FROM departments WHERE id = ?', [id]);
+      const formattedDepartment = {
+        ...updatedDepartment[0],
+        id: updatedDepartment[0].id.toString(),
+        createdAt: updatedDepartment[0].createdAt || new Date().toISOString(),
+        updatedAt: updatedDepartment[0].updatedAt || new Date().toISOString()
+      };
+      
+      res.json(formattedDepartment);
+    } catch (err) {
+      // If description column doesn't exist, try without it
+      if (err.code === 'ER_BAD_FIELD_ERROR') {
+        const [result] = await db.query('UPDATE departments SET name = ? WHERE id = ?', [name, id]);
+        
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ error: 'Department not found' });
+        }
+        
+        const [updatedDepartment] = await db.query('SELECT * FROM departments WHERE id = ?', [id]);
+        const formattedDepartment = {
+          ...updatedDepartment[0],
+          id: updatedDepartment[0].id.toString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        res.json(formattedDepartment);
+      } else {
+        throw err;
+      }
     }
-    
-    // Return the updated department
-    const [updatedDepartment] = await db.query('SELECT * FROM departments WHERE id = ?', [id]);
-    const formattedDepartment = {
-      ...updatedDepartment[0],
-      id: updatedDepartment[0].id.toString()
-    };
-    
-    res.json(formattedDepartment);
   } catch (error) {
     next(error);
   }

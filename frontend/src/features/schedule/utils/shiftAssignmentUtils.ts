@@ -78,7 +78,7 @@ export const createInitialAssignments = (
   const initialAssignments: ShiftAssignment[] = fetchedShifts.map((shift, index) => {
     let requiredStation: string[] = [];
     if (Array.isArray(shift.requiredStation)) {
-      requiredStation = shift.requiredStation.map(s => String(s).trim().toLowerCase());
+      requiredStation = shift.requiredStation.map((s: string) => String(s).trim().toLowerCase());
     } else if (shift.requiredStation) {
       requiredStation = [String(shift.requiredStation).trim().toLowerCase()];
     }

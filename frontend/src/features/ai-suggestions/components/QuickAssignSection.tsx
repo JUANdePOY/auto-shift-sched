@@ -88,6 +88,20 @@ export function QuickAssignSection({
     }
   };
 
+  // Only compute the expensive label when we have a real selection
+  const selectedEntry = useMemo(
+    () =>
+      rankedEmployees.find(r => r.employee.id === selectedEmployee),
+    [rankedEmployees, selectedEmployee]
+  );
+  const projectedHours = selectedEntry?.projectedHours ?? 0;
+  const isOver40 = projectedHours > 40;
+  const buttonLabel = selectedEmployee
+    ? isOver40
+      ? 'Assign (Over 40h)'
+      : 'Assign Selected'
+    : 'Assign Selected';
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -103,9 +117,8 @@ export function QuickAssignSection({
           </SelectTrigger>
           <SelectContent>
             {rankedEmployees.length > 0 ? (
-              rankedEmployees.map(({ employee, currentHours, projectedHours }) => {
-                const hoursWarning = projectedHours > 40;
-                
+              rankedEmployees.map(({ employee, currentHours, projectedHours: pj }) => {
+                const hoursWarning = pj > 40;
                 return (
                   <SelectItem key={employee.id} value={employee.id}>
                     <div className="flex items-center justify-between w-full">
@@ -113,7 +126,7 @@ export function QuickAssignSection({
                       <div className="flex items-center gap-1 text-xs">
                         <Clock className="w-3 h-3" />
                         <span className={hoursWarning ? 'text-orange-600 font-medium' : 'text-muted-foreground'}>
-                          {currentHours.toFixed(1)}h → {projectedHours.toFixed(1)}h
+                          {currentHours.toFixed(1)}h → {pj!.toFixed(1)}h
                         </span>
                       </div>
                     </div>
@@ -127,7 +140,6 @@ export function QuickAssignSection({
             )}
           </SelectContent>
         </Select>
-        
 
         <Button
           onClick={handleAssign}
@@ -135,10 +147,7 @@ export function QuickAssignSection({
           size="sm"
           className="w-full"
         >
-          {selectedEmployee && rankedEmployees.find(r => r.employee.id === selectedEmployee)?.projectedHours > 40
-            ? 'Assign (Over 40h)'
-            : 'Assign Selected'
-          }
+          {buttonLabel}
         </Button>
       </CardContent>
     </Card>

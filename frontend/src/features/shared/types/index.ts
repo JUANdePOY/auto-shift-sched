@@ -22,6 +22,7 @@ export interface Employee {
   skills?: string[];
   role?: 'admin' | 'manager' | 'crew';
   isActive?: boolean;
+  status?: 'active' | 'inactive';
   createdAt?: string;
   updatedAt?: string;
 }
@@ -104,6 +105,11 @@ export interface AISuggestion {
   title: string;
   description: string;
   confidence: number;
+  impact?: {
+    efficiency: number;
+    satisfaction: number;
+    coverage: number;
+  };
   action: {
     type: 'assign' | 'unassign' | 'swap';
     shiftId: string;

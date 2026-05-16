@@ -11,6 +11,7 @@ const scheduleRoutes = require('./features/schedule/routes/schedule');
 const scheduleGenerationRoutes = require('./features/schedule/routes/scheduleGeneration');
 const assignmentRoutes = require('./features/schedule/routes/assignments');
 const departmentRoutes = require('./features/employees/routes/departments');
+const stationRoutes = require('./features/organization/routes/stations');
 const availabilityRoutes = require('./features/availability/routes/availability');
 const crewRoutes = require('./features/crew/routes/crew');
 
@@ -61,7 +62,10 @@ app.get('/setup-database', (req, res) => {
 const createDepartmentsTableQuery = `
     CREATE TABLE IF NOT EXISTS departments (
       id INT AUTO_INCREMENT PRIMARY KEY,
-      name VARCHAR(255) NOT NULL
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     );
   `;
   const createStationsTableQuery = `
@@ -69,6 +73,9 @@ const createDepartmentsTableQuery = `
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
       departmentId INT,
+      description TEXT,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (departmentId) REFERENCES departments(id)
     );
   `;
@@ -141,12 +148,50 @@ const createDepartmentsTableQuery = `
                 return res.status(500).send('Error setting up departments table: ' + error.message);
               }
 
+              connection.query("ALTER TABLE departments ADD COLUMN description TEXT", (alterError) => {
+                if (alterError && alterError.code === 'ER_DUP_FIELDNAME') {
+                  console.log('Description column already exists, skipping...');
+                } else if (alterError) {
+                  console.warn('Could not add description column:', alterError.message);
+                }
+              });
+
+              connection.query("ALTER TABLE departments ADD COLUMN createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP", (err1) => {
+                if (err1 && err1.code === 'ER_DUP_FIELDNAME') {
+                  console.log('createdAt column already exists');
+                }
+              });
+
+              connection.query("ALTER TABLE departments ADD COLUMN updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP", (err2) => {
+                if (err2 && err2.code === 'ER_DUP_FIELDNAME') {
+                  console.log('updatedAt column already exists');
+                }
+              });
+
               connection.query(createStationsTableQuery, (error, results) => {
                 if (error) {
                   connection.release();
                   console.error('Error setting up stations table:', error);
                   return res.status(500).send('Error setting up stations table: ' + error.message);
                 }
+
+                connection.query("ALTER TABLE stations ADD COLUMN description TEXT", (alterErr1) => {
+                  if (alterErr1 && alterErr1.code === 'ER_DUP_FIELDNAME') {
+                    console.log('Stations description column already exists');
+                  }
+                });
+
+                connection.query("ALTER TABLE stations ADD COLUMN createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP", (err3) => {
+                  if (err3 && err3.code === 'ER_DUP_FIELDNAME') {
+                    console.log('Stations createdAt column already exists');
+                  }
+                });
+
+                connection.query("ALTER TABLE stations ADD COLUMN updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP", (err4) => {
+                  if (err4 && err4.code === 'ER_DUP_FIELDNAME') {
+                    console.log('Stations updatedAt column already exists');
+                  }
+                });
 
                 connection.query(createTimeoffTableQuery, (error, results) => {
                   connection.release();
@@ -243,6 +288,7 @@ app.use('/api/schedule', scheduleRoutes);
 app.use('/api/schedule-generation', scheduleGenerationRoutes);
 app.use('/api/shifts', assignmentRoutes); // Assignment routes are mounted under /api/shifts
 app.use('/api/departments', departmentRoutes);
+app.use('/api/stations', stationRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/crew', crewRoutes);
 

@@ -63,17 +63,16 @@ const ShiftAssignmentPanel = ({
     handleCloseEditDialog,
     handleStationToggle,
     handleFormChange
-  } = useAssignmentHandlers({
-    assignments: dataAssignments,
-    setAssignments: setDataAssignments,
-    employees,
-    date,
-    onSaveFinalSchedule,
-    onClose,
-    clearAssignmentsForDate,
-    updateAssignment,
-    departments
-  });
+} = useAssignmentHandlers({
+     assignments: dataAssignments,
+     setAssignments: setDataAssignments,
+     employees,
+     date,
+     onSaveFinalSchedule,
+     clearAssignmentsForDate,
+     updateAssignment,
+     departments
+   });
 
   // Use the auto-assign hook
   const { isAutoAssigning, handleAutoAssign } = useAutoAssign({
@@ -259,7 +258,7 @@ const ShiftAssignmentPanel = ({
             mode="panel"
             employeeCurrentHours={employeeCurrentHours}
             assignedEmployeeIds={assignedEmployeeIds}
-            finalSchedule={finalSchedule}
+            finalSchedule={finalSchedule || undefined}
           />
         </div>
       )}

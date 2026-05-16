@@ -11,12 +11,13 @@ import {
   Zap,
   Clock,
   User,
-  LogOut
+  LogOut,
+  Building2
 } from 'lucide-react';
 import { useAuth } from '../../auth/contexts/AuthContext';
 
 
-type AdminView = 'dashboard' | 'schedule' | 'employees' | 'availability' | 'settings';
+type AdminView = 'dashboard' | 'schedule' | 'employees' | 'availability' | 'organization' | 'settings';
 type CrewView = 'dashboard' | 'availability' | 'profile' | 'schedule';
 type View = AdminView | CrewView;
 
@@ -70,6 +71,11 @@ export function Navigation({ currentView, onViewChange }: NavigationProps) {
           id: 'availability',
           label: 'Availability',
           icon: Clock,
+        },
+        {
+          id: 'organization',
+          label: 'Organization',
+          icon: Building2,
         },
         {
           id: 'settings',

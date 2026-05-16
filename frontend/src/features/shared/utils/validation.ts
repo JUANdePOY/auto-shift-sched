@@ -2,7 +2,7 @@
  * Validation utilities for form inputs and data
  */
 
-import type { EmployeeFormData, WeeklyAvailability } from '@/types';
+import type { EmployeeFormData, WeeklyAvailability } from '@/features/shared/types';
 
 export interface ValidationError {
   field: string;

@@ -10,9 +10,10 @@ interface UseAssignmentHandlersParams {
   employees: Employee[];
   date: string;
   onSaveFinalSchedule?: (date: string, assignments: Array<{ shiftId: string; employeeId: string }>, notes?: string) => Promise<void>;
+  onClose?: () => void;
   clearAssignmentsForDate: (date: string) => void;
   updateAssignment: (date: string, shiftId: string, employeeId: string | null, employee?: Employee, shiftData?: any) => void;
-  departments: string[];
+  departments: { id: string; name: string; stations: { id: string; name: string }[] }[];
 }
 
 export const useAssignmentHandlers = ({
@@ -153,34 +154,34 @@ export const useAssignmentHandlers = ({
               requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase()),
               type: getShiftType(editForm.startTime),
               // If the assigned employee no longer matches the new department/stations, unassign them
-              assignedEmployee: assignment.assignedEmployee &&
-                getAvailableEmployees(
-                  {
-                    ...assignment,
-                    department: editForm.department,
-                    requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase())
-                  },
-                  employees,
-                  [], // tempAssignments - not available in this context
-                  [], // finalSchedule - not available in this context
-                  date
-                ).some(emp => emp.id === assignment.assignedEmployee?.id)
-                ? assignment.assignedEmployee
-                : undefined,
-              status: assignment.assignedEmployee &&
-                getAvailableEmployees(
-                  {
-                    ...assignment,
-                    department: editForm.department,
-                    requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase())
-                  },
-                  employees,
-                  [], // tempAssignments - not available in this context
-                  [], // finalSchedule - not available in this context
-                  date
-                ).some(emp => emp.id === assignment.assignedEmployee?.id)
-                ? 'assigned'
-                : 'unassigned'
+assignedEmployee: assignment.assignedEmployee &&
+                 getAvailableEmployees(
+                   {
+                     ...assignment,
+                     department: editForm.department,
+                     requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase())
+                   },
+                   employees,
+                   () => [],
+                   date,
+                   []
+                 ).some(emp => emp.id === assignment.assignedEmployee?.id)
+                 ? assignment.assignedEmployee
+                 : undefined,
+               status: assignment.assignedEmployee &&
+                 getAvailableEmployees(
+                   {
+                     ...assignment,
+                     department: editForm.department,
+                     requiredStation: editForm.requiredStation.map(s => s.trim().toLowerCase())
+                   },
+                   employees,
+                   () => [],
+                   date,
+                   []
+                 ).some(emp => emp.id === assignment.assignedEmployee?.id)
+                 ? 'assigned'
+                 : 'unassigned'
             }
           : assignment
       ));

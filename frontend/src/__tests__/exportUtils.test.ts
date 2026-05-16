@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { formatDateToYYYYMMDD, exportScheduleToExcel } from '../features/schedule/utils/exportUtils';
 import * as XLSX from 'xlsx';
-import { vi } from 'vitest';
 
 describe('formatDateToYYYYMMDD', () => {
   it('returns unchanged for date-only string', () => {
@@ -72,11 +71,11 @@ describe('exportScheduleToExcel', () => {
     // Should include our Details sheet
     expect(capturedWb.SheetNames).toContain('Details');
     // Details sheet should contain the two shifts
-    const details = XLSX.utils.sheet_to_json(capturedWb.Sheets['Details']);
+    const details = XLSX.utils.sheet_to_json(capturedWb.Sheets['Details']) as Record<string, unknown>[];
     expect(details.length).toBe(2);
 
     // Day sheet (Monday) should NOT include Department column — read starting at the data header row
-    const monday = XLSX.utils.sheet_to_json(capturedWb.Sheets['Monday'], { range: 3 });
+    const monday = XLSX.utils.sheet_to_json(capturedWb.Sheets['Monday'], { range: 3 }) as Record<string, unknown>[];
     expect(monday.length).toBe(1);
     // Day sheet should not include these detail-only columns
     expect(Object.keys(monday[0])).not.toContain('Department');

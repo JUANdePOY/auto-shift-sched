@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { getAllShifts } from '../services/scheduleService';
 import { getShiftType, formatTimeForDisplay } from '../utils/shiftUtils';
-import type { Department } from '../../../features/shared/types';
+import type { Employee, Department } from '../../../features/shared/types';
 
 interface ShiftAssignment {
   id: string;

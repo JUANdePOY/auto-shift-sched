@@ -7,7 +7,7 @@ import { Badge } from '../../shared/components/ui/badge';
 import { toast } from 'sonner';
 import { useAuth } from '../../auth/contexts/AuthContext';
 import { authService } from '../../auth/services/authService';
-import type { ChangePasswordData } from '../types';
+import type { AdminSettings, ChangePasswordData, SystemStats } from '../types';
 import { 
   Lock,
   Settings as SettingsIcon,

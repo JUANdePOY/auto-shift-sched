@@ -6,23 +6,27 @@ import { AlertTriangle, Users, Clock, ChevronDown, ChevronUp, Check, Plus, Edit,
 import type { Shift, Employee, ScheduleConflict } from '../../shared/types';
 
 interface ShiftDetailProps {
-  shifts: Shift[];
+  shift?: Shift;
+  shifts?: Shift[];
   employees: Employee[];
   conflicts: ScheduleConflict[];
-  date: string;
+  date?: string;
+  onClose?: () => void;
 }
 
 export function ShiftDetail({
-  shifts,
+  shift,
   employees,
   conflicts,
-  date,
+  onClose,
 }: ShiftDetailProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Handle single shift or shifts array
+  const shifts = shift && !Array.isArray(shift) ? [shift] : [];
   const totalShifts = shifts.length;
-  const assignedShifts = shifts.filter(shift => shift.assignedEmployees.length > 0).length;
-  const totalEmployees = new Set(shifts.flatMap(shift => shift.assignedEmployees)).size;
+  const assignedShifts = shifts.filter(s => s.assignedEmployees.length > 0).length;
+  const totalEmployees = new Set(shifts.flatMap(s => s.assignedEmployees)).size;
 
   const getEmployeeName = (employeeId: string) => {
     const employee = employees.find(emp => emp.id === employeeId);
@@ -46,18 +50,18 @@ export function ShiftDetail({
     return 'graveyard';
   };
 
-  if (!isExpanded) {
+  if (!isExpanded || shifts.length === 0) {
     return (
       <div className="space-y-6">
         {/* Day Summary */}
         <div className="p-4 bg-muted/30 rounded-lg">
           <h4 className="text-lg font-semibold mb-2">
-            Summary for {new Date(date).toLocaleDateString(undefined, {
+            Summary for {shift ? new Date(shift.date).toLocaleDateString(undefined, {
               weekday: 'long',
               year: 'numeric',
               month: 'long',
               day: 'numeric',
-            })}
+            }) : 'Unknown Date'}
           </h4>
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center">
@@ -82,28 +86,28 @@ export function ShiftDetail({
             Today's Shifts
           </h4>
           <div className="space-y-2 max-h-60 overflow-y-auto">
-            {shifts.map(shift => (
-              <div key={shift.id} className="flex items-center justify-between p-3 bg-muted/20 rounded-lg">
+            {shifts.map(s => (
+              <div key={s.id} className="flex items-center justify-between p-3 bg-muted/20 rounded-lg">
                 <div className="flex items-center gap-3">
                   <Clock className="w-4 h-4 text-blue-600" />
                   <div>
-                    <p className="font-medium">{shift.title}</p>
+                    <p className="font-medium">{s.title}</p>
                     <p className="text-sm text-muted-foreground">
-                      {shift.startTime} - {shift.endTime} • {shift.department}
+                      {s.startTime} - {s.endTime} • {s.department}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {shift.assignedEmployees.length > 0 && (
+                  {s.assignedEmployees.length > 0 && (
                     <Badge variant="default" className="bg-green-600">
                       <Check className="w-3 h-3 mr-1" />
-                      {shift.assignedEmployees.length}
+                      {s.assignedEmployees.length}
                     </Badge>
                   )}
-                  {getShiftConflicts(shift.id).length > 0 && (
+                  {getShiftConflicts(s.id).length > 0 && (
                     <Badge variant="destructive">
                       <AlertTriangle className="w-3 h-3 mr-1" />
-                      {getShiftConflicts(shift.id).length}
+                      {getShiftConflicts(s.id).length}
                     </Badge>
                   )}
                 </div>
@@ -157,15 +161,15 @@ export function ShiftDetail({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {shifts.map((shift, index) => {
-              const shiftConflicts = getShiftConflicts(shift.id);
+            {shifts.map((s, index) => {
+              const shiftConflicts = getShiftConflicts(s.id);
               const isEvenRow = index % 2 === 0;
               return (
                 <TableRow
-                  key={shift.id}
+                  key={s.id}
                   className={`
                     ${isEvenRow ? 'bg-background' : 'bg-muted/20'}
-                    ${shift.assignedEmployees.length > 0 ? 'bg-green-50/50' : ''}
+                    ${s.assignedEmployees.length > 0 ? 'bg-green-50/50' : ''}
                     transition-colors duration-150
                   `}
                 >
@@ -173,15 +177,15 @@ export function ShiftDetail({
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-blue-600" />
                       <span className="text-sm font-mono">
-                        {shift.startTime} - {shift.endTime}
+                        {s.startTime} - {s.endTime}
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium">{shift.title}</TableCell>
-                  <TableCell className="capitalize">{shift.department}</TableCell>
+                  <TableCell className="font-medium">{s.title}</TableCell>
+                  <TableCell className="capitalize">{s.department}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {Array.isArray(shift.requiredStation) && shift.requiredStation.map(station => (
+                      {Array.isArray(s.requiredStation) && s.requiredStation.map((station: string) => (
                         <Badge key={station} variant="outline" className="text-xs">
                           {station.replace('_', ' ')}
                         </Badge>
@@ -190,13 +194,13 @@ export function ShiftDetail({
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="capitalize">
-                      {getShiftType(shift.startTime)}
+                      {getShiftType(s.startTime)}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {shift.assignedEmployees.length > 0 ? (
+                    {s.assignedEmployees.length > 0 ? (
                       <div className="space-y-1">
-                        {shift.assignedEmployees.map(empId => (
+                        {s.assignedEmployees.map((empId: string) => (
                           <div key={empId} className="text-sm">
                             <p className="font-medium">{getEmployeeName(empId)}</p>
                             <p className="text-xs text-muted-foreground">{getEmployeeRole(empId)}</p>
@@ -210,10 +214,10 @@ export function ShiftDetail({
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Badge
-                        variant={shift.assignedEmployees.length > 0 ? 'default' : 'secondary'}
-                        className={shift.assignedEmployees.length > 0 ? 'bg-green-600' : ''}
+                        variant={s.assignedEmployees.length > 0 ? 'default' : 'secondary'}
+                        className={s.assignedEmployees.length > 0 ? 'bg-green-600' : ''}
                       >
-                        {shift.assignedEmployees.length > 0 ? 'Assigned' : 'Unassigned'}
+                        {s.assignedEmployees.length > 0 ? 'Assigned' : 'Unassigned'}
                       </Badge>
                       {shiftConflicts.length > 0 && (
                         <Badge variant="destructive">
@@ -238,7 +242,7 @@ export function ShiftDetail({
             className="flex items-center gap-2"
             onClick={() => {
               // TODO: Implement create shift functionality
-              console.log('Create shift for', date);
+              console.log('Create shift for', shift?.date);
             }}
           >
             <Plus className="w-4 h-4" />
@@ -249,7 +253,7 @@ export function ShiftDetail({
             className="flex items-center gap-2"
             onClick={() => {
               // TODO: Implement edit schedule functionality
-              console.log('Edit schedule for', date);
+              console.log('Edit schedule for', shift?.date);
             }}
           >
             <Edit className="w-4 h-4" />
@@ -260,7 +264,7 @@ export function ShiftDetail({
           className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
           onClick={() => {
             // TODO: Implement save schedule functionality
-            console.log('Save schedule for', date);
+            console.log('Save schedule for', shift?.date);
           }}
         >
           <Save className="w-4 h-4" />

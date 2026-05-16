@@ -136,14 +136,14 @@ export function WeeklyScheduleSummary({ isOpen, onToggle }: WeeklyScheduleSummar
                       <Alert key={index} className={conflict.severity === 'error' ? 'border-red-200 bg-red-50' : 'border-yellow-200 bg-yellow-50'}>
                         <div className="flex items-start gap-2">
                           {getConflictIcon(conflict.severity)}
-                          <AlertDescription className="text-sm">
-                            <strong>{conflict.employeeName}:</strong> {conflict.message}
-                            {conflict.date && (
-                              <span className="text-xs text-muted-foreground ml-2">
-                                ({new Date(conflict.date).toLocaleDateString()})
-                              </span>
-                            )}
-                          </AlertDescription>
+<AlertDescription className="text-sm">
+                             <strong>{conflict.employeeId}:</strong> {conflict.message}
+                             {conflict.date && (
+                               <span className="text-xs text-muted-foreground ml-2">
+                                 ({new Date(conflict.date).toLocaleDateString()})
+                               </span>
+                             )}
+                           </AlertDescription>
                         </div>
                       </Alert>
                     ))}

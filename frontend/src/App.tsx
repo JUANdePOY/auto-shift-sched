@@ -17,9 +17,10 @@ import { CrewDashboard } from './features/crew/components/CrewDashboard';
 import { CrewAvailabilityPanel } from './features/crew/components/CrewAvailabilityPanel';
 import { CrewProfileWrapper } from './features/crew/components/CrewProfileWrapper';
 import { Settings } from './features/admin/components/Settings';
+import { OrganizationManagement } from './features/organization/components/OrganizationManagement';
 import { TemporaryScheduleProvider } from './features/schedule/contexts/TemporaryScheduleContext';
 
-type AdminView = 'dashboard' | 'schedule' | 'employees' | 'availability' | 'settings';
+type AdminView = 'dashboard' | 'schedule' | 'employees' | 'availability' | 'organization' | 'settings';
 type CrewView = 'dashboard' | 'availability' | 'profile' | 'schedule';
 type View = AdminView | CrewView;
 
@@ -110,6 +111,9 @@ export default function App() {
 
         case 'settings':
           return <Settings />;
+
+        case 'organization':
+          return <OrganizationManagement />;
 
         case 'dashboard':
         default:

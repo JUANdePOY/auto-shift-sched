@@ -36,15 +36,16 @@ export interface AssignmentProgressProps {
 }
 
 export interface ShiftAssignmentsTableProps {
-  assignments: ShiftAssignment[];
-  onAssignEmployee: (shiftId: string, employeeId: string) => void;
-  onUnassignEmployee: (shiftId: string) => void;
-  onOpenAISuggestionPanel: (shiftId: string) => void;
-  onEditShift: (shift: ShiftAssignment) => void;
-  onDeleteShift: (shiftId: string) => void;
-  employees: Employee[];
-  getAvailableEmployees: (shift: ShiftAssignment) => Employee[];
-}
+   assignments: ShiftAssignment[];
+   typeFilter: string;
+   onAssignEmployee: (shiftId: string, employeeId: string) => void;
+   onUnassignEmployee: (shiftId: string) => void;
+   onOpenAISuggestionPanel: (shiftId: string) => void;
+   onEditShift: (shift: ShiftAssignment) => void;
+   onDeleteShift: (shiftId: string) => void;
+   employees: Employee[];
+   getAvailableEmployees: (shift: ShiftAssignment) => Employee[];
+ }
 
 export interface AddShiftDialogProps {
   isOpen: boolean;

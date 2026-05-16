@@ -19,9 +19,11 @@ export function useSuggestions() {
       updateEmployeeHours(suggestion.action.employeeId, -8);
     }
 
-    toast.success(`Applied suggestion: ${suggestion.title}`, {
-      description: `Schedule updated successfully. Efficiency improved by ${suggestion.impact.efficiency}%.`
-    });
+toast.success(`Applied suggestion: ${suggestion.title}`, {
+       description: suggestion.impact 
+         ? `Schedule updated successfully. Efficiency improved by ${suggestion.impact.efficiency}%.`
+         : 'Schedule updated successfully.'
+     });
   };
 
   return {

@@ -87,7 +87,7 @@ export function useAutoAssign({
       const currentWeeklyHours = calculateCurrentWeeklyHours();
 
       // Get already assigned employee IDs for this date
-      const assignedEmployeeIds = new Set();
+      const assignedEmployeeIds = new Set<string>();
       updatedAssignments.forEach(assignment => {
         if (assignment.status === 'assigned' && assignment.assignedEmployee?.id) {
           assignedEmployeeIds.add(assignment.assignedEmployee.id);
@@ -160,9 +160,9 @@ export function useAutoAssign({
               assignedEmployee = employees.find(emp => emp.id === availableEmployee.employee.id);
             }
           }
-        } catch (error) {
-          console.warn(`AI suggestions failed for shift ${shift.id}, using enhanced assignment:`, error.message);
-        }
+} catch (error: unknown) {
+           console.warn(`AI suggestions failed for shift ${shift.id}, using enhanced assignment:`, error);
+         }
 
         // Enhanced assignment logic if AI suggestions failed
         if (!assignedEmployee) {

@@ -86,7 +86,15 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({ isOpen, onClose, o
         maxHoursPerWeek,
         currentWeeklyHours,
         isActive,
-        availability: availability || {}
+        availability: availability || {
+          monday: { available: false },
+          tuesday: { available: false },
+          wednesday: { available: false },
+          thursday: { available: false },
+          friday: { available: false },
+          saturday: { available: false },
+          sunday: { available: false },
+        }
       };
       await onSubmit(employeeData);
       onClose();
